@@ -527,6 +527,8 @@ lexpr({op,_,Op,Larg,Rarg}, Prec, Hook) ->
     Lr = lexpr(Rarg, R, Hook),
     El = {list,[Ll,Ol,Lr]},
     maybe_paren(P, Prec, El);
+lexpr({code,_,E}, _, Hook) ->
+    {list,[{step,'<|',lexpr(E, Hook)},'|>']};
 %% Special expressions which are not really legal everywhere.
 lexpr({remote,_,M,F}, Prec, Hook) ->
     {L,P,R} = inop_prec(':'),
@@ -1031,7 +1033,7 @@ wordtable() ->
     L = [begin {leaf,Sz,S} = leaf(W), {S,Sz} end ||
             W <- [" ->"," =","<<",">>","[]","after","begin","case","catch",
                   "end","fun","if","of","receive","try","when"," ::","..",
-                  " |"]],
+                  " |", "<|", "|>"]],
     list_to_tuple(L).
 
 word(' ->', WT) -> element(1, WT);
@@ -1052,4 +1054,6 @@ word('try', WT) -> element(15, WT);
 word('when', WT) -> element(16, WT);
 word(' ::', WT) -> element(17, WT);
 word('..', WT) -> element(18, WT);
-word(' |', WT) -> element(19, WT).
+word(' |', WT) -> element(19, WT);
+word('<|', WT) -> element(20, WT);
+word('|>', WT) -> element(21, WT).

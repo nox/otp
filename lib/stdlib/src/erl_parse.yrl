@@ -37,6 +37,7 @@ record_expr record_tuple record_field record_fields
 if_expr if_clause if_clauses case_expr cr_clause cr_clauses receive_expr
 fun_expr fun_clause fun_clauses
 try_expr try_catch try_clause try_clauses query_expr
+code_expr
 function_call argument_list
 exprs guard
 atomic strings
@@ -52,6 +53,7 @@ bin_base_type bin_unit_type type_200 type_300 type_400 type_500.
 Terminals
 char integer float atom string var
 
+'<|' '|>' '`'
 '(' ')' ',' '->' ':-' '{' '}' '[' ']' '|' '||' '<-' ';' ':' '#' '.'
 'after' 'begin' 'case' 'try' 'catch' 'end' 'fun' 'if' 'of' 'receive' 'when'
 'andalso' 'orelse' 'query'
@@ -245,6 +247,7 @@ expr_500 -> expr_500 mult_op expr_600 :
 	?mkop2('$1', '$2', '$3').
 expr_500 -> expr_600 : '$1'.
 
+expr_600 -> '`' expr_700 : {escape,?line('$1'),'$2'}.
 expr_600 -> prefix_op expr_700 :
 	?mkop1('$1', '$2').
 expr_600 -> expr_700 : '$1'.
@@ -279,6 +282,7 @@ expr_max -> receive_expr : '$1'.
 expr_max -> fun_expr : '$1'.
 expr_max -> try_expr : '$1'.
 expr_max -> query_expr : '$1'.
+expr_max -> code_expr : '$1'.
 
 
 list -> '[' ']' : {nil,?line('$1')}.
@@ -434,6 +438,9 @@ try_clause -> var ':' expr clause_guard clause_body :
 
 query_expr -> 'query' list_comprehension 'end' :
 	{'query',?line('$1'),'$2'}.
+
+code_expr -> '<|' expr '|>' :
+	{code,?line('$1'),'$2'}.
 
 
 argument_list -> '(' ')' : {[],?line('$1')}.

@@ -529,6 +529,12 @@ scan1([C|Cs], St, Line, Col, Toks) when ?WHITE_SPACE(C) ->
             skip_white_space(Cs, St, Line, Col, Toks, 1)
     end;
 %% Punctuation characters and operators, first recognise multiples.
+%% <|
+scan1("<|"++Cs, St, Line, Col, Toks) ->
+    tok2(Cs, St, Line, Col, Toks, "<|", '<|', 2);
+%% |>
+scan1("|>"++Cs, St, Line, Col, Toks) ->
+    tok2(Cs, St, Line, Col, Toks, "|>", '|>', 2);
 %% << <- <=
 scan1("<<"++Cs, St, Line, Col, Toks) ->
     tok2(Cs, St, Line, Col, Toks, "<<", '<<', 2);

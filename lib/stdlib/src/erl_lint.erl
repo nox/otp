@@ -93,6 +93,7 @@ value_option(Flag, Default, On, OnVal, Off, OffVal, Opts) ->
 %% 'called' and 'exports' contain {Line, {Function, Arity}},
 %% the other function collections contain {Function, Arity}.
 -record(lint, {state=start		:: 'start' | 'attribute' | 'function',
+               ctxs={[],[]},                    %Contexts zipper (for code staging)
                module=[],                       %Module
                package="",                      %Module package
                extends=[],                      %Extends
@@ -363,6 +364,9 @@ format_error(callback_wrong_arity) ->
 format_error({imported_predefined_type, Name}) ->
     io_lib:format("referring to built-in type ~w as a remote type; "
 		  "please take out the module name", [Name]);
+%% --- escapes ---
+format_error(escaped_out_of_scope) ->
+    "escaped out of scope";
 %% --- obsolete? unused? ---
 format_error({format_error, {Fmt, Args}}) ->
     io_lib:format(Fmt, Args);
@@ -1483,6 +1487,15 @@ pattern({match,_Line,Pat1,Pat2}, Vt, Old, Bvt, St0) ->
     {Rvt,Bvt2,St2} = pattern(Pat2, Vt, Old, Bvt, St1),
     St3 = reject_bin_alias(Pat1, Pat2, St2),
     {vtmerge_pat(Lvt, Rvt),vtmerge_pat(Bvt1,Bvt2),St3};
+pattern({escape,Line,E}, Vt, Old, Bvt, St) ->
+    case handle_escape(E, {pattern,Vt,Old,Bvt}, St) of
+        {{pattern,Vt1,_,Bvt1},St1} ->
+            {vtmerge_pat(Vt, Vt1),vtmerge_pat(Bvt, Bvt1),St1};
+        error -> {[],[],add_error(Line, escaped_out_of_scope, St)}
+    end;
+pattern({code,_,E}, Vt, Old, Bvt, St) ->
+    {{pattern,Vt1,_,Bvt1},St1} = handle_code(E, {pattern,Vt,Old,Bvt}, St),
+    {vtmerge_pat(Vt, Vt1),vtmerge_pat(Bvt, Bvt1),St1};
 %% Catch legal constant expressions, including unary +,-.
 pattern(Pat, _Vt, _Old, _Bvt, St) ->
     case is_pattern_expr(Pat) of
@@ -1914,7 +1927,15 @@ gexpr({op,Line,Op,L,R}, Vt, St0) ->
     case is_gexpr_op(Op, 2) of
         true -> {Avt,St1};
         false -> {Avt,add_error(Line, illegal_guard_expr, St1)}
+  end;
+gexpr({escape,Line,E}, Vt, St) ->
+    case handle_escape(E, {gexpr,Vt}, St) of
+        {{gexpr,Vt1},St1} -> {vtupdate(Vt1, Vt),St1};
+        error -> {[],add_error(Line, escaped_out_of_scope, St)}
     end;
+gexpr({code,_,E}, Vt, St) ->
+    {{gexpr,Vt1},St1} = handle_code(E, {gexpr,Vt}, St),
+    {vtupdate(Vt1, Vt),St1};
 %% Everything else is illegal! You could put explicit tests here to
 %% better error diagnostics.
 gexpr(E, _Vt, St) ->
@@ -2039,6 +2060,8 @@ exprs([], _Vt, St) -> {[],St}.
 %%  mark illegally exported variables, e.g. from catch, as unsafe to better
 %%  show why unbound.
 
+expr({var,_Line,_V}, Vt, St=#lint{ctxs={[_PCtx|_NPCtx],_NCtxs}}) ->
+    {Vt, St};
 expr({var,Line,V}, Vt, St) ->
     expr_var(V, Line, Vt, St);
 expr({char,_Line,_C}, _Vt, St) -> {[],St};
@@ -2254,6 +2277,14 @@ expr({op,Line,Op,L,R}, Vt, St0) when Op =:= 'orelse'; Op =:= 'andalso' ->
     {vtmerge(Evt1, Vt3),St3};
 expr({op,_Line,_Op,L,R}, Vt, St) ->
     expr_list([L,R], Vt, St);                   %They see the same variables
+expr({escape,Line,E}, Vt, St) ->
+    case handle_escape(E, {expr,Vt}, St) of
+        {{expr,Vt1},St1} -> {vtupdate(Vt1, Vt),St1};
+        error -> {[],add_error(Line, escaped_out_of_scope, St)}
+    end;
+expr({code,_,E}, Vt, St) ->
+    {{expr,Vt1},St1} = handle_code(E, {expr,Vt}, St),
+    {vtupdate(Vt1, Vt),St1};
 %% The following are not allowed to occur anywhere!
 expr({remote,Line,_M,_F}, _Vt, St) ->
     {[],add_error(Line, illegal_expr, St)};
@@ -3029,6 +3060,39 @@ fun_clause({clause,_Line,H,G,B}, Vt0, St0) ->
     {_, St6} = check_old_unused_vars(Cvt, Svt, St5),
     Vt4 = vtmerge(Svt, vtsubtract(Cvt, Svt)),
     {vtold(Vt4, Vt0),St6}.
+
+handle_escape(_, _, #lint{ctxs={[],_}}) ->
+    error;
+handle_escape(E, NCtx, St=#lint{ctxs={[PCtx|PCtxs1],NCtxs}}) ->
+    St1 = St#lint{ctxs={PCtxs1,[NCtx|NCtxs]}},
+    {PCtx1,St3} = case PCtx of
+                      {expr,Vt} ->
+                          {Evt,St2} = expr(E, Vt, St1),
+                          {{expr,vtupdate(Evt, Vt)},St2};
+                      {pattern,Vt,Old,Bvt} ->
+                          {Vt1,Bvt1,St2} = pattern(E, Vt, Old, Bvt, St1),
+                          Vt2 = vtmerge_pat(Vt, Vt1),
+                          Bvt2 = vtmerge_pat(Bvt, Bvt1),
+                          {{pattern,Vt2,Old,Bvt2},St2};
+                      {gexpr,Vt} ->
+                          {Vt1,St2} = gexpr(E, Vt, St1),
+                          {{gexpr,vtupdate(Vt1, Vt)},St2}
+                  end,
+    #lint{ctxs={PCtxs2,[NCtx1|NCtxs2]}} = St3,
+    {NCtx1,St3#lint{ctxs={[PCtx1|PCtxs2],NCtxs2}}}.
+
+handle_code(E, PCtx, St=#lint{ctxs={PCtxs,NCtxs}}) ->
+    {New,Vt,NCtxs1} = case NCtxs of
+                           [{expr,Vt1}|Rest] -> {false,Vt1,Rest};
+                           _ -> {true,[],NCtxs}
+                      end,
+    St1 = St#lint{ctxs={[PCtx|PCtxs],NCtxs1}},
+    {Evt,St2=#lint{ctxs={[PCtx1|PCtxs1],NCtxs2}}} = expr(E, Vt, St1),
+    NCtxs3 = case New of
+                  false -> [{expr,vtupdate(Evt, Vt)}|NCtxs2];
+                  true -> NCtxs2
+             end,
+    {PCtx1,St2#lint{ctxs={PCtxs1,NCtxs3}}}.
 
 %% In the variable table we store information about variables. The
 %% information is a tuple {State,Usage,Lines}, the variables state and

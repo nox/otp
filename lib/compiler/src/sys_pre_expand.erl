@@ -65,7 +65,10 @@ module(Fs0, Opts0) ->
     %% Expand records. Normalise guard tests.
     Fs = erl_expand_records:module(Fs0, Opts0),
 
-    Opts = compiler_options(Fs) ++ Opts0,
+    %% Stage brackets.
+    Fs1 = erl_stage_brackets:module(Fs),
+
+    Opts = compiler_options(Fs1) ++ Opts0,
 
     %% Set pre-defined exported functions.
     PreExp = [{module_info,0},{module_info,1}],
@@ -82,7 +85,7 @@ module(Fs0, Opts0) ->
                   bittypes = erl_bits:system_bittypes()
                  },
     %% Expand the functions.
-    {Tfs,St1} = forms(Fs, define_functions(Fs, St0)),
+    {Tfs,St1} = forms(Fs1, define_functions(Fs1, St0)),
     {Efs,St2} = expand_pmod(Tfs, St1),
     %% Get the correct list of exported functions.
     Exports = case member(export_all, St2#expand.compile) of

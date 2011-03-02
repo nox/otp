@@ -419,7 +419,10 @@ expr({op,Line,Op,L0,R0}, St0) when Op =:= 'andalso';
 expr({op,Line,Op,L0,R0}, St0) ->
     {L,St1} = expr(L0, St0),
     {R,St2} = expr(R0, St1),
-    {{op,Line,Op,L,R},St2}.
+    {{op,Line,Op,L,R},St2};
+expr({code,Line,E0}, St0) ->
+    {E,St1} = expr(E0, St0),
+    {{code,Line,E},St1}.
 
 expr_list([E0 | Es0], St0) ->
     {E,St1} = expr(E0, St0),

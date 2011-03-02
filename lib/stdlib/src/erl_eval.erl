@@ -403,6 +403,10 @@ expr({bin,_,Fs}, Bs0, Lf, Ef, RBs) ->
     ret_expr(V, Bs, RBs);
 expr({remote,_,_,_}, _Bs, _Lf, _Ef, _RBs) ->
     erlang:raise(error, {badexpr,':'}, stacktrace());
+expr({code,_,_}=E, Bs0, Lf, Ef, RBs) ->
+    SE = erl_stage_brackets:expr(E),
+    {value,V,Bs} = expr(SE, Bs0, Lf, Ef, RBs),
+    ret_expr(V, Bs, RBs);
 expr({value,_,Val}, Bs, _Lf, _Ef, RBs) ->    % Special case straight values.
     ret_expr(Val, Bs, RBs).
 
@@ -1050,6 +1054,8 @@ match1({op,Line,Op,L,R}, Term, Bs, BBs) ->
 	X ->
 	    match1(X, Term, Bs, BBs)
     end;
+match1({code,_,_}=P, Term, Bs0, BBs) ->
+    match1(erl_stage_brackets:pattern(P), Term, Bs0, BBs);
 match1(_, _, _Bs, _BBs) ->
     throw(invalid).
 
