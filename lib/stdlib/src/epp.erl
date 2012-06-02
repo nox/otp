@@ -105,16 +105,18 @@ open(Name, Path, Pdm) ->
     internal_open([{name, Name}, {includes, Path}, {macros, Pdm}], #epp{}).
 
 open(Name, File, StartLocation, Path, Pdm) ->
-    internal_open([{name, Name}, {includes, Path}, {macros, Pdm}],
-		  #epp{file=File, pre_opened=true, location=StartLocation}).
+    internal_open([{name, Name}, {includes, Path}, {macros, Pdm},
+                   {location, StartLocation}],
+                  #epp{file=File, pre_opened=true}).
 
 -spec open(Options) ->
 		  {'ok', Epp} | {'ok', Epp, Extra} | {'error', ErrorDescriptor} when
       Options :: [{'default_encoding', DefEncoding :: source_encoding()} |
-		  {'includes', IncludePath :: [DirectoryName :: file:name()]} |
-		  {'macros', PredefMacros :: macros()} |
-		  {'name',FileName :: file:name()} |
-		  'extra'],
+                  {'includes', IncludePath :: [DirectoryName :: file:name()]} |
+                  {'macros', PredefMacros :: macros()} |
+                  {'name', FileName :: file:name()} |
+                  {'location', Location :: erl_scan:location()} |
+                  'extra'],
       Epp :: epp_handle(),
       Extra :: [{'encoding', source_encoding() | 'none'}],
       ErrorDescriptor :: term().
@@ -122,12 +124,13 @@ open(Name, File, StartLocation, Path, Pdm) ->
 open(Options) ->
     internal_open(Options, #epp{}).
 
-internal_open(Options, St) ->
+internal_open(Options, St0) ->
     case proplists:get_value(name, Options) of
         undefined ->
             erlang:error(badarg);
         Name ->
             Self = self(),
+            St = St0#epp{location=proplists:get_value(location, Options, 1)},
             Epp = spawn(fun() -> server(Self, Name, Options, St) end),
             case epp_request(Epp) of
                 {ok, Pid, Encoding} ->
@@ -155,10 +158,10 @@ scan_erl_form(Epp) ->
     epp_request(Epp, scan_erl_form).
 
 -spec parse_erl_form(Epp) ->
-        {'ok', AbsForm} | {'eof', Line} | {error, ErrorInfo} when
+        {'ok', AbsForm} | {'eof', Location} | {error, ErrorInfo} when
       Epp :: epp_handle(),
       AbsForm :: erl_parse:abstract_form(),
-      Line :: erl_scan:line(),
+      Location :: erl_scan:location(),
       ErrorInfo :: erl_scan:error_info() | erl_parse:error_info().
 
 parse_erl_form(Epp) ->
@@ -218,9 +221,10 @@ format_error(E) -> file:format_error(E).
                 {'ok', [Form]} | {error, OpenError} when
       FileName :: file:name(),
       IncludePath :: [DirectoryName :: file:name()],
-      Form :: erl_parse:abstract_form() | {'error', ErrorInfo} | {'eof',Line},
+      Form :: erl_parse:abstract_form() | {'error', ErrorInfo} |
+              {'eof', Location},
       PredefMacros :: macros(),
-      Line :: erl_scan:line(),
+      Location :: erl_scan:location(),
       ErrorInfo :: erl_scan:error_info() | erl_parse:error_info(),
       OpenError :: file:posix() | badarg | system_limit.
 
@@ -231,11 +235,13 @@ parse_file(Ifile, Path, Predefs) ->
         {'ok', [Form]} | {'ok', [Form], Extra} | {error, OpenError} when
       FileName :: file:name(),
       Options :: [{'includes', IncludePath :: [DirectoryName :: file:name()]} |
-		  {'macros', PredefMacros :: macros()} |
-		  {'default_encoding', DefEncoding :: source_encoding()} |
-		  'extra'],
-      Form :: erl_parse:abstract_form() | {'error', ErrorInfo} | {'eof',Line},
-      Line :: erl_scan:line(),
+                  {'macros', PredefMacros :: macros()} |
+                  {'default_encoding', DefEncoding :: source_encoding()} |
+                  {'location', Location} |
+                  'extra'],
+      Form :: erl_parse:abstract_form() | {'error', ErrorInfo} |
+              {'eof', Location},
+      Location :: erl_scan:location(),
       ErrorInfo :: erl_scan:error_info() | erl_parse:error_info(),
       Extra :: [{'encoding', source_encoding() | 'none'}],
       OpenError :: file:posix() | badarg | system_limit.
@@ -678,10 +684,11 @@ enter_file2(NewF, Pname, From, St0, AtLocation) ->
          default_encoding=DefEncoding}.
 
 enter_file_reply(From, Name, Location, AtLocation) ->
-    Attr = loc_attr(AtLocation),
+    {line,Attr} = erl_scan:attributes_info(AtLocation, line),
+    {line,Line} = erl_scan:attributes_info(Location, line),
     Rep = {ok, [{'-',Attr},{atom,Attr,file},{'(',Attr},
 		{string,Attr,file_name(Name)},{',',Attr},
-		{integer,Attr,get_line(Location)},{')',Location},
+		{integer,Attr,Line},{')',Location},
                 {dot,Attr}]},
     epp_reply(From, Rep).
 
@@ -1092,7 +1099,8 @@ scan_file([{'(',_Llp},{string,_Ls,Name},{',',_Lc},{integer,_Li,Ln},{')',_Lrp},
     Ms = dict:store({atom,'FILE'}, {none,[{string,1,Name}]}, St#epp.macs),
     Locf = loc(Tf),
     NewLoc = new_location(Ln, St#epp.location, Locf),
-    Delta = abs(get_line(element(2, Tf)))-Ln + St#epp.delta, 
+    {line, Line} = erl_scan:token_info(Tf, line),
+    Delta = abs(Line) - Ln + St#epp.delta,
     wait_req_scan(St#epp{name2=Name,location=NewLoc,delta=Delta,macs=Ms});
 scan_file(_Toks, Tf, From, St) ->
     epp_reply(From, {error,{loc(Tf),epp,{bad,file}}}),
@@ -1443,18 +1451,13 @@ fname_join(["." | [_|_]=Rest]) ->
 fname_join(Components) ->
     filename:join(Components).
 
-%% The line only. (Other tokens may have the column and text as well...)
-loc_attr(Line) when is_integer(Line) ->
-    Line;
-loc_attr({Line,_Column}) ->
-    Line.
-
 loc(Token) ->
     {location,Location} = erl_scan:token_info(Token, location),
     Location.
 
 abs_loc(Token) ->
-    loc(setelement(2, Token, abs_line(element(2, Token)))).
+    {location,Loc} = erl_scan:token_info(Token, location),
+    abs_line(Loc).
 
 neg_line(L) ->
     erl_scan:set_attribute(line, L, fun(Line) -> -abs(Line) end).
@@ -1469,11 +1472,6 @@ start_loc(Line) when is_integer(Line) ->
     1;
 start_loc({_Line, _Column}) ->
     {1,1}.
-
-get_line(Line) when is_integer(Line) ->
-    Line;
-get_line({Line,_Column}) ->
-    Line.
 
 %% epp has always output -file attributes when entering and leaving
 %% included files (-include, -include_lib). Starting with R11B the

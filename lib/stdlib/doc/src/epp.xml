@@ -103,9 +103,9 @@
       <fsummary>Return the next Erlang form from the opened Erlang source file</fsummary>
       <desc>
         <p>Returns the next Erlang form from the opened Erlang source file.
-          The tuple <c>{eof, <anno>Line</anno>}</c> is returned at end-of-file. The first
-          form corresponds to an implicit attribute <c>-file(File,1).</c>, where
-          <c>File</c> is the name of the file.</p>
+          The tuple <c>{eof, <anno>Location</anno>}</c> is returned at
+          end-of-file. The first form corresponds to an implicit attribute
+          <c>-file(File, 1).</c>, where <c>File</c> is the name of the file.</p>
       </desc>
     </func>
     <func>
@@ -113,7 +113,7 @@
       <fsummary>Preprocess and parse an Erlang source file</fsummary>
       <desc>
         <p>Preprocesses and parses an Erlang source file.
-	Note that the tuple <c>{eof, <anno>Line</anno>}</c> returned
+	Note that the tuple <c>{eof, <anno>Location</anno>}</c> returned
 	at end-of-file is included as a "form".</p>
 	<p>If <c>extra</c> is given in
 	<c><anno>Options</anno></c>, the return value will be
@@ -224,7 +224,7 @@
       modules. It has the following format:
       </p>
     <code type="none">
-    {ErrorLine, Module, ErrorDescriptor}    </code>
+    {ErrorLocation, Module, ErrorDescriptor}    </code>
     <p>A string which describes the error is obtained with the following call:
       </p>
     <code type="none">

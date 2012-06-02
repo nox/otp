@@ -1311,8 +1311,8 @@ otp_10302(Config) when is_list(Config) ->
     %% Two messages (one too many). Keeps otp_4871 happy.
     Cs = [{otp_8562,
            <<"%% coding: utf-8\n \n \x{E4}">>,
-           {errors,[{3,epp,cannot_parse},
-                    {3,file_io_server,invalid_unicode}],[]}}
+           {errors,[{{3,1},epp,cannot_parse},
+                    {{3,1},file_io_server,invalid_unicode}],[]}}
          ],
     [] = compile(Config, Cs),
     Dir = ?config(priv_dir, Config),
