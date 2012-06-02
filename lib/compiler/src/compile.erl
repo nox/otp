@@ -821,6 +821,7 @@ do_parse_module(DefEncoding, #compile{ifile=File,options=Opts,dir=Dir}=St) ->
 		       [{includes,[".",Dir|inc_paths(Opts)]},
 			{macros,pre_defs(Opts)},
 			{default_encoding,DefEncoding},
+                        {location,{1,1}},
 			extra]),
     case R of
 	{ok,Forms,Extra} ->
