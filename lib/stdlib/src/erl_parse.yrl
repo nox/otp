@@ -44,7 +44,7 @@ atomic strings
 prefix_op mult_op add_op list_op comp_op
 rule rule_clauses rule_clause rule_body
 binary bin_elements bin_element bit_expr
-opt_bit_size_expr bit_size_expr opt_bit_type_list bit_type_list bit_type
+bit_size_expr bit_type_list bit_type
 top_type top_type_100 top_types type typed_expr typed_attr_val
 type_sig type_sigs type_guard type_guards fun_type fun_type_100 binary_type
 type_spec spec_fun typed_exprs typed_record_fields field_types field_type
@@ -71,64 +71,85 @@ Expect 2.
 
 Rootsymbol form.
 
-form -> attribute dot : '$1'.
-form -> function dot : '$1'.
-form -> rule dot : '$1'.
+form -> attribute dot : range(?line('$2'), '$1').
+form -> function dot : range(?line('$2'), '$1').
+form -> rule dot : range(?line('$2'), '$1').
 
-attribute -> '-' atom attr_val               : build_attribute('$2', '$3').
-attribute -> '-' atom typed_attr_val         : build_typed_attribute('$2','$3').
-attribute -> '-' atom '(' typed_attr_val ')' : build_typed_attribute('$2','$4').
-attribute -> '-' 'spec' type_spec            : build_type_spec('$2', '$3').
-attribute -> '-' 'callback' type_spec        : build_type_spec('$2', '$3').
+attribute -> '-' atom attr_val :
+    range(?line('$1'), ?line('$3'), build_attribute('$2', element(1, '$3'))).
+attribute -> '-' atom typed_attr_val :
+    range(?line('$1'), ?line('$3'),
+          build_typed_attribute('$2', element(1, '$3'))).
+attribute -> '-' atom '(' typed_attr_val ')' :
+    range(?line('$1'), ?line('$5'),
+          build_typed_attribute('$2', element(1, '$4'))).
+attribute -> '-' 'spec' type_spec :
+    range(?line('$1'), ?line('$3'), build_type_spec('$2', element(1, '$3'))).
+attribute -> '-' 'callback' type_spec :
+    range(?line('$1'), ?line('$3'), build_type_spec('$2', element(1, '$3'))).
 
-type_spec -> spec_fun type_sigs : {'$1', '$2'}.
-type_spec -> '(' spec_fun type_sigs ')' : {'$2', '$3'}.
+type_spec -> spec_fun type_sigs :
+    range(?line('$2'), {{element(1, '$1'),element(1, '$2')},?line('$1')}).
+type_spec -> '(' spec_fun type_sigs ')' :
+    range(?line('$4'), {{element(1, '$2'),element(1, '$3')},?line('$1')}).
 
-spec_fun ->                           atom : '$1'.
-spec_fun ->                  atom ':' atom : {'$1', '$3'}.
+spec_fun -> atom :
+    {'$1', ?line('$1')}.
+spec_fun -> atom ':' atom :
+    range(?line('$3'), {{'$1','$3'},?line('$1')}).
 %% The following two are retained only for backwards compatibility;
 %% they are not part of the EEP syntax and should be removed.
-spec_fun ->          atom '/' integer '::' : {'$1', '$3'}.
-spec_fun -> atom ':' atom '/' integer '::' : {'$1', '$3', '$5'}.
+spec_fun -> atom '/' integer '::' :
+    range(?line('$4'), {{'$1','$3'},?line('$1')}).
+spec_fun -> atom ':' atom '/' integer '::' :
+    range(?line('$6'), {{'$1','$3','$5'},?line('$1')}).
 
-typed_attr_val -> expr ',' typed_record_fields : {typed_record, '$1', '$3'}.
-typed_attr_val -> expr '::' top_type           : {type_def, '$1', '$3'}.
+typed_attr_val -> expr ',' typed_record_fields :
+    range(?line('$3'), {{typed_record,'$1','$3'},?line('$1')}).
+typed_attr_val -> expr '::' top_type :
+    range(?line('$3'), {{type_def,'$1','$3'},?line('$1')}).
 
-typed_record_fields -> '{' typed_exprs '}' : {tuple, ?line('$1'), '$2'}.
+typed_record_fields -> '{' typed_exprs '}' :
+    range(?line('$3'), {tuple,?line('$1'),'$2'}).
 
 typed_exprs -> typed_expr                 : ['$1'].
 typed_exprs -> typed_expr ',' typed_exprs : ['$1'|'$3'].
 typed_exprs -> expr ',' typed_exprs       : ['$1'|'$3'].
 typed_exprs -> typed_expr ',' exprs       : ['$1'|'$3'].
 
-typed_expr -> expr '::' top_type          : {typed,'$1','$3'}.
+typed_expr -> expr '::' top_type :
+    range('$3', {typed,'$1','$3'}).
 
-type_sigs -> type_sig                     : ['$1'].
-type_sigs -> type_sig ';' type_sigs       : ['$1'|'$3'].
+type_sigs -> type_sig : {['$1'],?line('$1')}.
+type_sigs -> type_sig ';' type_sigs :
+    range(?line('$3'), {['$1'|element(1, '$3')],?line('$1')}).
 
 type_sig -> fun_type                      : '$1'.
-type_sig -> fun_type 'when' type_guards   : {type, ?line('$1'), bounded_fun,
-                                             ['$1','$3']}.
+type_sig -> fun_type 'when' type_guards :
+    range(?line('$3'),
+              {type,?line('$1'),bounded_fun,['$1',element(1, '$3')]}).
 
-type_guards -> type_guard                 : ['$1'].
-type_guards -> type_guard ',' type_guards : ['$1'|'$3'].
+type_guards -> type_guard : {['$1'],?line('$1')}.
+type_guards -> type_guard ',' type_guards :
+    range(?line('$3'), {['$1'|element(1, '$3')],?line('$1')}).
 
-type_guard -> atom '(' top_types ')'      : {type, ?line('$1'), constraint,
-                                             ['$1', '$3']}.
+type_guard -> atom '(' top_types ')' :
+    range(?line('$4'), {type,?line('$1'),constraint,['$1','$3']}).
 type_guard -> var '::' top_type           : build_def('$1', '$3').
 
 top_types -> top_type                     : ['$1'].
 top_types -> top_type ',' top_types       : ['$1'|'$3'].
 
-top_type -> var '::' top_type_100         : {ann_type, ?line('$1'), ['$1','$3']}.
+top_type -> var '::' top_type_100 :
+    range(?line('$3'), {ann_type,?line('$1'),['$1','$3']}).
 top_type -> top_type_100                  : '$1'.
 
 top_type_100 -> type_200                  : '$1'.
 top_type_100 -> type_200 '|' top_type_100 : lift_unions('$1','$3').
 
-type_200 -> type_300 '..' type_300        : {type, ?line('$1'), range,
-                                             [skip_paren('$1'),
-                                              skip_paren('$3')]}.
+type_200 -> type_300 '..' type_300 :
+    range(?line('$3'),
+          {type,?line('$1'),range,[skip_paren('$1'),skip_paren('$3')]}).
 type_200 -> type_300                      : '$1'.
 
 type_300 -> type_300 add_op type_400      : ?mkop2(skip_paren('$1'),
@@ -142,92 +163,110 @@ type_400 -> type_500                      : '$1'.
 type_500 -> prefix_op type                : ?mkop1('$1', skip_paren('$2')).
 type_500 -> type                          : '$1'.
 
-type -> '(' top_type ')'                  : {paren_type, ?line('$2'), ['$2']}.
+type -> '(' top_type ')' :
+    {paren_type,?line('$2'),[range(?line('$1'),?line('$3'),'$2')]}.
 type -> var                               : '$1'.
 type -> atom                              : '$1'.
-type -> atom '(' ')'                      : build_gen_type('$1').
-type -> atom '(' top_types ')'            : {type, ?line('$1'),
-                                             normalise('$1'), '$3'}.
-type -> atom ':' atom '(' ')'             : {remote_type, ?line('$1'),
-                                             ['$1', '$3', []]}.
-type -> atom ':' atom '(' top_types ')'   : {remote_type, ?line('$1'),
-                                             ['$1', '$3', '$5']}.
-type -> '[' ']'                           : {type, ?line('$1'), nil, []}.
-type -> '[' top_type ']'                  : {type, ?line('$1'), list, ['$2']}.
-type -> '[' top_type ',' '...' ']'        : {type, ?line('$1'),
-                                             nonempty_list, ['$2']}.
-type -> '#' '{' '}'                       : {type, ?line('$1'), map, []}.
-type -> '#' '{' map_pair_types '}'        : {type, ?line('$1'), map, '$3'}.
-type -> '{' '}'                           : {type, ?line('$1'), tuple, []}.
-type -> '{' top_types '}'                 : {type, ?line('$1'), tuple, '$2'}.
-type -> '#' atom '{' '}'                  : {type, ?line('$1'), record, ['$2']}.
-type -> '#' atom '{' field_types '}'      : {type, ?line('$1'),
-                                             record, ['$2'|'$4']}.
+type -> atom '(' ')' : range(?line('$3'), build_gen_type('$1')).
+type -> atom '(' top_types ')' :
+    range(?line('$4'), {type,?line('$1'),normalise('$1'),'$3'}).
+type -> atom ':' atom '(' ')' :
+    range(?line('$5'), {remote_type,?line('$1'),['$1','$3',[]]}).
+type -> atom ':' atom '(' top_types ')' :
+    range(?line('$6'), {remote_type,?line('$1'),['$1','$3','$5']}).
+type -> '[' ']' : range(?line('$2'), {type,?line('$1'),nil,[]}).
+type -> '[' top_type ']' :
+    range(?line('$3'), {type,?line('$1'),list,['$2']}).
+type -> '[' top_type ',' '...' ']' :
+    range(?line('$5'), {type,?line('$1'),nonempty_list,['$2']}).
+type -> '#' '{' '}' : range(?line('$3'), {type,?line('$1'),map,[]}).
+type -> '#' '{' map_pair_types '}' :
+    range(?line('$4'), {type, ?line('$1'),map,'$3'}).
+type -> '{' '}' : range(?line('$2'), {type, ?line('$1'),tuple,[]}).
+type -> '{' top_types '}' :
+    range(?line('$3'),{type,?line('$1'),tuple,'$2'}).
+type -> '#' atom '{' '}' :
+    range(?line('$3'), {type,?line('$1'),record,['$2']}).
+type -> '#' atom '{' field_types '}' :
+    range(?line('$5'), {type,?line('$1'),record,['$2'|'$4']}).
 type -> binary_type                       : '$1'.
 type -> integer                           : '$1'.
-type -> 'fun' '(' ')'                     : {type, ?line('$1'), 'fun', []}.
+type -> 'fun' '(' ')' : range(?line('$3'), {type,?line('$1'),'fun',[]}).
 type -> 'fun' '(' fun_type_100 ')'        : '$3'.
-
-fun_type_100 -> '(' '...' ')' '->' top_type
-                                          : {type, ?line('$1'), 'fun',
-                                             [{type, ?line('$1'), any}, '$5']}.
+fun_type_100 -> '(' '...' ')' '->' top_type :
+    Any = range(?line('$3'), {type,?line('$1'),any}),
+    range(?line('$5'), {type,?line('$1'),'fun',[Any,'$5']}).
 fun_type_100 -> fun_type                  : '$1'.
 
-fun_type -> '(' ')' '->' top_type  : {type, ?line('$1'), 'fun',
-                                      [{type, ?line('$1'), product, []}, '$4']}.
-fun_type -> '(' top_types ')' '->' top_type
-                                   : {type, ?line('$1'), 'fun',
-                                      [{type, ?line('$1'), product, '$2'},'$5']}.
+fun_type -> '(' ')' '->' top_type :
+    Product = range(?line('$2'), {type,?line('$1'),product,[]}),
+    range(?line('$4'), {type,?line('$1'),'fun',[Product,'$4']}).
+fun_type -> '(' top_types ')' '->' top_type :
+    Product = range(?line('$3'), {type,?line('$1'),product,'$2'}),
+    range(?line('$5'), {type,?line('$1'),'fun',[Product,'$5']}).
 
 map_pair_types -> map_pair_type                    : ['$1'].
 map_pair_types -> map_pair_type ',' map_pair_types : ['$1'|'$3'].
-map_pair_type  -> top_type '=>' top_type           : {type, ?line('$2'), map_field_assoc,'$1','$3'}.
+map_pair_type  -> top_type '=>' top_type :
+    range(?line('$1'), ?line('$3'),
+          {type,?line('$2'),map_field_assoc,'$1','$3'}).
 
 field_types -> field_type                 : ['$1'].
 field_types -> field_type ',' field_types : ['$1'|'$3'].
 
-field_type -> atom '::' top_type          : {type, ?line('$1'), field_type,
-                                             ['$1', '$3']}.
+field_type -> atom '::' top_type :
+    range(?line('$3'), {type,?line('$1'),field_type,['$1','$3']}).
 
-binary_type -> '<<' '>>'                  : {type, ?line('$1'),binary,
-					     [abstract(0, ?line('$1')),
-					      abstract(0, ?line('$1'))]}.
-binary_type -> '<<' bin_base_type '>>'    : {type, ?line('$1'),binary,
-					     ['$2', abstract(0, ?line('$1'))]}.
-binary_type -> '<<' bin_unit_type '>>'    : {type, ?line('$1'),binary,
-                                             [abstract(0, ?line('$1')), '$2']}.
-binary_type -> '<<' bin_base_type ',' bin_unit_type '>>'
-                                    : {type, ?line('$1'), binary, ['$2', '$4']}.
+binary_type -> '<<' '>>' :
+    range(?line('$2'),
+          {type,?line('$1'),binary,
+           [abstract(0, ?line('$1')),abstract(0, ?line('$1'))]}).
+binary_type -> '<<' bin_base_type '>>' :
+    range(?line('$3'),
+          {type,?line('$1'),binary,['$2',abstract(0, ?line('$1'))]}).
+binary_type -> '<<' bin_unit_type '>>' :
+    range(?line('$3'),
+          {type,?line('$1'),binary,[abstract(0, ?line('$1')),'$2']}).
+binary_type -> '<<' bin_base_type ',' bin_unit_type '>>' :
+    range(?line('$5'), {type,?line('$1'),binary,['$2','$4']}).
 
-bin_base_type -> var ':' type          : build_bin_type(['$1'], '$3').
+bin_base_type -> var ':' type :
+    range(?line('$1'), ?line('$3'), build_bin_type(['$1'], '$3')).
 
-bin_unit_type -> var ':' var '*' type  : build_bin_type(['$1', '$3'], '$5').
+bin_unit_type -> var ':' var '*' type :
+    range(?line('$1'), ?line('$5'), build_bin_type(['$1', '$3'], '$5')).
 
-attr_val -> expr                     : ['$1'].
-attr_val -> expr ',' exprs           : ['$1' | '$3'].
-attr_val -> '(' expr ',' exprs ')'   : ['$2' | '$4'].
+attr_val -> expr :
+    {['$1'], ?line('$1')}.
+attr_val -> expr ',' exprs :
+    range(?line('$3'), {['$1'|element(1, '$3')],?line('$1')}).
+attr_val -> '(' expr ',' exprs ')' :
+    range(?line('$1'), ?line('$5'), {['$2'|element(1, '$4')],?line('$1')}).
 
 function -> function_clauses : build_function('$1').
 
-function_clauses -> function_clause : ['$1'].
-function_clauses -> function_clause ';' function_clauses : ['$1'|'$3'].
+function_clauses -> function_clause : {['$1'],?line('$1')}.
+function_clauses -> function_clause ';' function_clauses :
+    range(?line('$3'), {['$1'|element(1, '$3')],?line('$1')}).
 
 function_clause -> atom clause_args clause_guard clause_body :
-	{clause,?line('$1'),element(3, '$1'),'$2','$3','$4'}.
+    range(?line('$4'),
+          {clause,?line('$1'),element(3, '$1'),'$2','$3',element(1, '$4')}).
 
 
 clause_args -> argument_list : element(1, '$1').
 
-clause_guard -> 'when' guard : '$2'.
+clause_guard -> 'when' guard : element(1, '$2').
 clause_guard -> '$empty' : [].
 
-clause_body -> '->' exprs: '$2'.
+clause_body -> '->' exprs: range(?line('$1'), ?line('$2'), '$2').
 
 
-expr -> 'catch' expr : {'catch',?line('$1'),'$2'}.
+expr -> 'catch' expr : range(?line('$2'), {'catch',?line('$1'),'$2'}).
 expr -> expr_100 : '$1'.
 
-expr_100 -> expr_150 '=' expr_100 : {match,?line('$2'),'$1','$3'}.
+expr_100 -> expr_150 '=' expr_100 :
+    range(?line('$1'), ?line('$3'), {match,?line('$2'),'$1','$3'}).
 expr_100 -> expr_150 '!' expr_100 : ?mkop2('$1', '$2', '$3').
 expr_100 -> expr_150 : '$1'.
 
@@ -263,7 +302,7 @@ expr_700 -> record_expr : '$1'.
 expr_700 -> expr_800 : '$1'.
 
 expr_800 -> expr_max ':' expr_max :
-	{remote,?line('$2'),'$1','$3'}.
+	range(?line('$1'), ?line('$3'), {remote,?line('$2'),'$1','$3'}).
 expr_800 -> expr_max : '$1'.
 
 expr_max -> var : '$1'.
@@ -274,8 +313,9 @@ expr_max -> list_comprehension : '$1'.
 expr_max -> binary_comprehension : '$1'.
 expr_max -> tuple : '$1'.
 %%expr_max -> struct : '$1'.
-expr_max -> '(' expr ')' : '$2'.
-expr_max -> 'begin' exprs 'end' : {block,?line('$1'),'$2'}.
+expr_max -> '(' expr ')' : range(?line('$1'), ?line('$3'), '$2').
+expr_max -> 'begin' exprs 'end' :
+    range(?line('$3'), {block,?line('$1'),element(1, '$2')}).
 expr_max -> if_expr : '$1'.
 expr_max -> case_expr : '$1'.
 expr_max -> receive_expr : '$1'.
@@ -283,68 +323,78 @@ expr_max -> fun_expr : '$1'.
 expr_max -> try_expr : '$1'.
 
 
-list -> '[' ']' : {nil,?line('$1')}.
-list -> '[' expr tail : {cons,?line('$1'),'$2','$3'}.
+list -> '[' ']' : range(?line('$2'), {nil,?line('$1')}).
+list -> '[' expr tail :
+    range(?line('$3'), {cons,?line('$1'),'$2',element(1, '$3')}).
 
-tail -> ']' : {nil,?line('$1')}.
-tail -> '|' expr ']' : '$2'.
-tail -> ',' expr tail : {cons,?line('$2'),'$2','$3'}.
+tail -> ']' : {{nil,?line('$1')},?line('$1')}.
+tail -> '|' expr ']' : {'$2',?line('$3')}.
+tail -> ',' expr tail :
+    {range(?line('$1'), ?line('$3'), {cons,?line('$2'),'$2',element(1, '$3')}),
+     ?line('$3')}.
 
-
-binary -> '<<' '>>' : {bin,?line('$1'),[]}.
-binary -> '<<' bin_elements '>>' : {bin,?line('$1'),'$2'}.
+binary -> '<<' '>>' : range(?line('$2'), {bin,?line('$1'),[]}).
+binary -> '<<' bin_elements '>>' :
+    range(?line('$3'), {bin,?line('$1'),'$2'}).
 
 bin_elements -> bin_element : ['$1'].
 bin_elements -> bin_element ',' bin_elements : ['$1'|'$3'].
 
-bin_element -> bit_expr opt_bit_size_expr opt_bit_type_list :
-	{bin_element,?line('$1'),'$1','$2','$3'}.
+bin_element -> bit_expr : {bin_element,?line('$1'),'$1',default,default}.
+bin_element -> bit_expr ':' bit_size_expr :
+    range(?line('$3'), {bin_element,?line('$1'),'$1','$3',default}).
+bin_element -> bit_expr '/' bit_type_list :
+    range(?line('$3'), {bin_element,?line('$1'),'$1',default,element(1, '$3')}).
+bin_element -> bit_expr ':' bit_size_expr '/' bit_type_list :
+    range(?line('$5'), {bin_element,?line('$1'),'$1','$3',element(1, '$5')}).
 
 bit_expr -> prefix_op expr_max : ?mkop1('$1', '$2').
 bit_expr -> expr_max : '$1'.
 
-opt_bit_size_expr -> ':' bit_size_expr : '$2'.
-opt_bit_size_expr -> '$empty' : default.
+bit_type_list -> bit_type '-' bit_type_list :
+    range(?line('$3'), {[element(1, '$1')|element(1, '$3')],?line('$1')}).
+bit_type_list -> bit_type :
+    {[element(1, '$1')],?line('$1')}.
 
-opt_bit_type_list -> '/' bit_type_list : '$2'.
-opt_bit_type_list -> '$empty' : default.
-
-bit_type_list -> bit_type '-' bit_type_list : ['$1' | '$3'].
-bit_type_list -> bit_type : ['$1'].
-
-bit_type -> atom             : element(3,'$1').
-bit_type -> atom ':' integer : { element(3,'$1'), element(3,'$3') }.
+bit_type -> atom :
+    {element(3,'$1'),?line('$1')}.
+bit_type -> atom ':' integer :
+    range(?line('$3'), {{element(3, '$1'),element(3, '$3')},?line('$1')}).
 
 bit_size_expr -> expr_max : '$1'.
 
 
 list_comprehension -> '[' expr '||' lc_exprs ']' :
-	{lc,?line('$1'),'$2','$4'}.
+    range(?line('$5'), {lc,?line('$1'),'$2',element(1, '$4')}).
 binary_comprehension -> '<<' binary '||' lc_exprs '>>' :
-	{bc,?line('$1'),'$2','$4'}.
-lc_exprs -> lc_expr : ['$1'].
-lc_exprs -> lc_expr ',' lc_exprs : ['$1'|'$3'].
+    range(?line('$5'), {bc,?line('$1'),'$2',element(1, '$4')}).
+lc_exprs -> lc_expr : {['$1'],?line('$1')}.
+lc_exprs -> lc_expr ',' lc_exprs :
+    range(?line('$3'), {['$1'|element(1, '$3')],?line('$1')}).
 
 lc_expr -> expr : '$1'.
-lc_expr -> expr '<-' expr : {generate,?line('$2'),'$1','$3'}.
-lc_expr -> binary '<=' expr : {b_generate,?line('$2'),'$1','$3'}.
+lc_expr -> expr '<-' expr :
+    range(?line('$1'), ?line('$3'), {generate,?line('$2'),'$1','$3'}).
+lc_expr -> binary '<=' expr :
+    range(?line('$1'), ?line('$3'), {b_generate,?line('$2'),'$1','$3'}).
 
-tuple -> '{' '}' : {tuple,?line('$1'),[]}.
-tuple -> '{' exprs '}' : {tuple,?line('$1'),'$2'}.
+tuple -> '{' '}' : range(?line('$2'), {tuple,?line('$1'),[]}).
+tuple -> '{' exprs '}' :
+    range(?line('$3'), {tuple,?line('$1'),element(1, '$2')}).
 
 
 %%struct -> atom tuple :
-%%	{struct,?line('$1'),element(3, '$1'),element(3, '$2')}.
+%%    range(?line('$2'), {struct,?line('$1'),element(3, '$1'),element(3, '$2')}).
 
 map_expr -> '#' map_tuple :
-	{map, ?line('$1'),'$2'}.
+	range(?line('$2'), {map,?line('$1'),element(1, '$2')}).
 map_expr -> expr_max '#' map_tuple :
-	{map, ?line('$2'),'$1','$3'}.
+	range(?line('$1'), ?line('$3'), {map,?line('$2'),'$1',element(1, '$3')}).
 map_expr -> map_expr '#' map_tuple :
-	{map, ?line('$2'),'$1','$3'}.
+	range(?line('$1'), ?line('$3'), {map,?line('$2'),'$1',element(1, '$3')}).
 
-map_tuple -> '{' '}' : [].
-map_tuple -> '{' map_fields '}' : '$2'.
+map_tuple -> '{' '}' : range(?line('$2'), {[],?line('$1')}).
+map_tuple -> '{' map_fields '}' : range(?line('$3'), {'$2',?line('$1')}).
 
 map_fields -> map_field : ['$1'].
 map_fields -> map_field ',' map_fields : ['$1' | '$3'].
@@ -353,10 +403,10 @@ map_field -> map_field_assoc : '$1'.
 map_field -> map_field_exact : '$1'.
 
 map_field_assoc -> map_key '=>' expr :
-	{map_field_assoc,?line('$1'),'$1','$3'}.
+	range(?line('$3'), {map_field_assoc,?line('$1'),'$1','$3'}).
 
 map_field_exact -> map_key ':=' expr :
-	{map_field_exact,?line('$1'),'$1','$3'}.
+	range(?line('$3'), {map_field_exact,?line('$1'),'$1','$3'}).
 
 map_key -> expr : '$1'.
 
@@ -366,65 +416,74 @@ map_key -> expr : '$1'.
 %% always atoms for the moment, this might change in the future.
 
 record_expr -> '#' atom '.' atom :
-	{record_index,?line('$1'),element(3, '$2'),'$4'}.
+    range(?line('$4'), {record_index,?line('$1'),element(3, '$2'),'$4'}).
 record_expr -> '#' atom record_tuple :
-	{record,?line('$1'),element(3, '$2'),'$3'}.
+    range(?line('$3'), {record,?line('$1'),element(3, '$2'),'$3'}).
 record_expr -> expr_max '#' atom '.' atom :
-	{record_field,?line('$2'),'$1',element(3, '$3'),'$5'}.
+    range(?line('$1'), ?line('$5'),
+          {record_field,?line('$2'),'$1',element(3, '$3'),'$5'}).
 record_expr -> expr_max '#' atom record_tuple :
-	{record,?line('$2'),'$1',element(3, '$3'),'$4'}.
+    range(?line('$1'), ?line('$4'),
+          {record,?line('$2'),'$1',element(3, '$3'),element(1, '$4')}).
 record_expr -> record_expr '#' atom '.' atom :
-	{record_field,?line('$2'),'$1',element(3, '$3'),'$5'}.
+    range(?line('$1'), ?line('$5'),
+          {record_field,?line('$2'),'$1',element(3, '$3'),'$5'}).
 record_expr -> record_expr '#' atom record_tuple :
-	{record,?line('$2'),'$1',element(3, '$3'),'$4'}.
+    range(?line('$1'), ?line('$4'),
+          {record,?line('$2'),'$1',element(3, '$3'),element(1, '$4')}).
 
-record_tuple -> '{' '}' : [].
-record_tuple -> '{' record_fields '}' : '$2'.
+record_tuple -> '{' '}' : range(?line('$2'), {[],?line('$1')}).
+record_tuple -> '{' record_fields '}' : range(?line('$3'), {'$2',?line('$1')}).
 
 record_fields -> record_field : ['$1'].
 record_fields -> record_field ',' record_fields : ['$1' | '$3'].
 
-record_field -> var '=' expr : {record_field,?line('$1'),'$1','$3'}.
-record_field -> atom '=' expr : {record_field,?line('$1'),'$1','$3'}.
+record_field -> var '=' expr :
+    range(?line('$3'), {record_field,?line('$1'),'$1','$3'}).
+record_field -> atom '=' expr :
+    range(?line('$3'), {record_field,?line('$1'),'$1','$3'}).
 
 %% N.B. This is called from expr_700.
 
 function_call -> expr_800 argument_list :
-	{call,?line('$1'),'$1',element(1, '$2')}.
+    range(?line('$2'), {call,?line('$1'),'$1',element(1, '$2')}).
 
 
-if_expr -> 'if' if_clauses 'end' : {'if',?line('$1'),'$2'}.
+if_expr -> 'if' if_clauses 'end' :
+    range(?line('$3'), {'if',?line('$1'),'$2'}).
 
 if_clauses -> if_clause : ['$1'].
 if_clauses -> if_clause ';' if_clauses : ['$1' | '$3'].
 
 if_clause -> guard clause_body :
-	{clause,?line(hd(hd('$1'))),[],'$1','$2'}.
+    range(?line('$2'),
+          {clause,?line('$1'),[],element(1, '$1'),element(1, '$2')}).
 
 
 case_expr -> 'case' expr 'of' cr_clauses 'end' :
-	{'case',?line('$1'),'$2','$4'}.
+    range(?line('$5'), {'case',?line('$1'),'$2','$4'}).
 
 cr_clauses -> cr_clause : ['$1'].
 cr_clauses -> cr_clause ';' cr_clauses : ['$1' | '$3'].
 
 cr_clause -> expr clause_guard clause_body :
-	{clause,?line('$1'),['$1'],'$2','$3'}.
+    range(?line('$3'), {clause,?line('$1'),['$1'],'$2',element(1, '$3')}).
 
 receive_expr -> 'receive' cr_clauses 'end' :
-	{'receive',?line('$1'),'$2'}.
+    range(?line('$3'), {'receive',?line('$1'),'$2'}).
 receive_expr -> 'receive' 'after' expr clause_body 'end' :
-	{'receive',?line('$1'),[],'$3','$4'}.
+    range(?line('$5'), {'receive',?line('$1'),[],'$3',element(1, '$4')}).
 receive_expr -> 'receive' cr_clauses 'after' expr clause_body 'end' :
-	{'receive',?line('$1'),'$2','$4','$5'}.
+    range(?line('$6'), {'receive',?line('$1'),'$2','$4',element(1, '$5')}).
 
 
 fun_expr -> 'fun' atom '/' integer :
-	{'fun',?line('$1'),{function,element(3, '$2'),element(3, '$4')}}.
+    range(?line('$4'),
+          {'fun',?line('$1'),{function,element(3, '$2'),element(3, '$4')}}).
 fun_expr -> 'fun' atom_or_var ':' atom_or_var '/' integer_or_var :
-	{'fun',?line('$1'),{function,'$2','$4','$6'}}.
+    range(?line('$6'), {'fun',?line('$1'),{function,'$2','$4','$6'}}).
 fun_expr -> 'fun' fun_clauses 'end' :
-	build_fun(?line('$1'), '$2').
+    range(?line('$3'), build_fun(?line('$1'), '$2')).
 
 atom_or_var -> atom : '$1'.
 atom_or_var -> var : '$1'.
@@ -436,47 +495,56 @@ fun_clauses -> fun_clause : ['$1'].
 fun_clauses -> fun_clause ';' fun_clauses : ['$1' | '$3'].
 
 fun_clause -> argument_list clause_guard clause_body :
-	{Args,Pos} = '$1',
-	{clause,Pos,'fun',Args,'$2','$3'}.
+    range(?line('$3'),
+          {clause,?line('$1'),'fun',element(1, '$1'),'$2',element(1, '$3')}).
 
 fun_clause -> var argument_list clause_guard clause_body :
-	{clause,element(2, '$1'),element(3, '$1'),element(1, '$2'),'$3','$4'}.
+	range(?line('$1'), ?line('$4'),
+          {clause,element(2, '$1'),
+           element(3, '$1'),element(1, '$2'),'$3',element(1, '$4')}).
 
 try_expr -> 'try' exprs 'of' cr_clauses try_catch :
-	build_try(?line('$1'),'$2','$4','$5').
+    range(?line('$5'), build_try(?line('$1'),element(1, '$2'),'$4','$5')).
 try_expr -> 'try' exprs try_catch :
-	build_try(?line('$1'),'$2',[],'$3').
+    range(?line('$3'), build_try(?line('$1'),element(1, '$2'),[],'$3')).
 
 try_catch -> 'catch' try_clauses 'end' :
-	{'$2',[]}.
+    range(?line('$3'), {{'$2',[]},?line('$1')}).
 try_catch -> 'catch' try_clauses 'after' exprs 'end' :
-	{'$2','$4'}.
+    range(?line('$5'), {{'$2','$4'},?line('$1')}).
 try_catch -> 'after' exprs 'end' :
-	{[],'$2'}.
+    range(?line('$3'), {{[],element(1, '$2')},?line('$1')}).
 
 try_clauses -> try_clause : ['$1'].
 try_clauses -> try_clause ';' try_clauses : ['$1' | '$3'].
 
 try_clause -> expr clause_guard clause_body :
-	L = ?line('$1'),
-	{clause,L,[{tuple,L,[{atom,L,throw},'$1',{var,L,'_'}]}],'$2','$3'}.
+    L = ?line('$1'),
+    Tuple = [{tuple,L,[{atom,L,throw},'$1',{var,L,'_'}]}],
+    range(?line('$3'), {clause,L,Tuple,'$2',element(1, '$3')}).
 try_clause -> atom ':' expr clause_guard clause_body :
-	L = ?line('$1'),
-	{clause,L,[{tuple,L,['$1','$3',{var,L,'_'}]}],'$4','$5'}.
+    L = ?line('$1'),
+    range(?line('$5'),
+          {clause,L,[{tuple,L,['$1','$3',{var,L,'_'}]}],'$4',element(1, '$5')}).
 try_clause -> var ':' expr clause_guard clause_body :
-	L = ?line('$1'),
-	{clause,L,[{tuple,L,['$1','$3',{var,L,'_'}]}],'$4','$5'}.
+    L = ?line('$1'),
+    range(?line('$5'),
+          {clause,L,[{tuple,L,['$1','$3',{var,L,'_'}]}],'$4',element(1, '$5')}).
 
 
-argument_list -> '(' ')' : {[],?line('$1')}.
-argument_list -> '(' exprs ')' : {'$2',?line('$1')}.
+
+argument_list -> '(' ')' : range(?line('$2'), {[],?line('$1')}).
+argument_list -> '(' exprs ')' :
+    range(?line('$3'), {element(1, '$2'),?line('$1')}).
 
 
-exprs -> expr : ['$1'].
-exprs -> expr ',' exprs : ['$1' | '$3'].
+exprs -> expr : {['$1'],?line('$1')}.
+exprs -> expr ',' exprs :
+    range(?line('$3'), {['$1'|element(1, '$3')],?line('$3')}).
 
-guard -> exprs : ['$1'].
-guard -> exprs ';' guard : ['$1'|'$3'].
+guard -> exprs : {[element(1, '$1')],?line('$1')}.
+guard -> exprs ';' guard :
+    range(?line('$3'), {[element(1, '$1')|element(1, '$3')],?line('$1')}).
 
 atomic -> char : '$1'.
 atomic -> integer : '$1'.
@@ -486,7 +554,8 @@ atomic -> strings : '$1'.
 
 strings -> string : '$1'.
 strings -> string strings :
-	{string,?line('$1'),element(3, '$1') ++ element(3, '$2')}.
+    range(?line('$2'),
+          {string,?line('$1'),element(3, '$1') ++ element(3, '$2')}).
 
 prefix_op -> '+' : '$1'.
 prefix_op -> '-' : '$1'.
@@ -523,13 +592,15 @@ comp_op -> '=/=' : '$1'.
 
 rule -> rule_clauses : build_rule('$1').
 
-rule_clauses -> rule_clause : ['$1'].
-rule_clauses -> rule_clause ';' rule_clauses : ['$1'|'$3'].
+rule_clauses -> rule_clause : {['$1'],?line('$1')}.
+rule_clauses -> rule_clause ';' rule_clauses :
+    range(?line('$3'), {['$1'|element(1, '$3')],?line('$1')}).
 
 rule_clause -> atom clause_args clause_guard rule_body :
-	{clause,?line('$1'),element(3, '$1'),'$2','$3','$4'}.
+    range(?line('$4'),
+          {clause,?line('$1'),element(3, '$1'),'$2','$3',element(1, '$4')}).
 
-rule_body -> ':-' lc_exprs: '$2'.
+rule_body -> ':-' lc_exprs: range(?line('$1'), ?line('$2'), '$2').
 
 
 Erlang code.
@@ -539,6 +610,7 @@ Erlang code.
 -export([abstract/2]).
 -export([inop_prec/1,preop_prec/1,func_prec/0,max_prec/0]).
 -export([set_line/2,get_attribute/2,get_attributes/1]).
+-export([range/3,range/2]).
 
 %% The following directive is needed for (significantly) faster compilation
 %% of the generated .erl file by the HiPE compiler.  Please do not remove.
@@ -560,13 +632,13 @@ Erlang code.
 -define(mkop2(L, OpPos, R),
         begin
             {Op,Pos} = OpPos,
-            {op,Pos,Op,L,R}
+            range(?line(L), ?line(R), {op,Pos,Op,L,R})
         end).
 
 -define(mkop1(OpPos, A),
         begin
             {Op,Pos} = OpPos,
-            {op,Pos,Op,A}
+            range(?line(A), {op,Pos,Op,A})
         end).
 
 %% keep track of line info in tokens
@@ -666,13 +738,14 @@ find_arity_from_specs([Spec|_]) ->
     length(Args).
 
 build_def(LHS, Types) ->
-    IsSubType = {atom, ?line(LHS), is_subtype},
-    {type, ?line(LHS), constraint, [IsSubType, [LHS, Types]]}.
+    L = ?line(LHS),
+    IsSubType = {atom, L, is_subtype},
+    range(?line(Types), {type, L, constraint, [IsSubType, [LHS, Types]]}).
 
-lift_unions(T1, {type, _La, union, List}) ->
-    {type, ?line(T1), union, [T1|List]};
+lift_unions(T1, {type, La, union, List}) ->
+    range(La, {type, ?line(T1), union, [T1|List]});
 lift_unions(T1, T2) ->
-    {type, ?line(T1), union, [T1, T2]}.
+    range(?line(T2), {type, ?line(T1), union, [T1, T2]}).
 
 skip_paren({paren_type,_L,[Type]}) ->
     skip_paren(Type);
@@ -820,19 +893,19 @@ term(Expr) ->
     catch _:_R -> ret_err(?line(Expr), "bad attribute")
     end.
 
-%% build_function([Clause]) -> {function,Line,Name,Arity,[Clause]}
+%% build_function({[Clause],Attrs}) -> {function,Attrs,Name,Arity,[Clause]}
 
-build_function(Cs) ->
+build_function({Cs,Attrs}) ->
     Name = element(3, hd(Cs)),
     Arity = length(element(4, hd(Cs))),
-    {function,?line(hd(Cs)),Name,Arity,check_clauses(Cs, Name, Arity)}.
+    {function,Attrs,Name,Arity,check_clauses(Cs, Name, Arity)}.
 
-%% build_rule([Clause]) -> {rule,Line,Name,Arity,[Clause]'}
+%% build_rule({[Clause],Attrs}) -> {rule,Attrs,Name,Arity,[Clause]'}
 
-build_rule(Cs) ->
+build_rule({Cs,Attrs}) ->
     Name = element(3, hd(Cs)),
     Arity = length(element(4, hd(Cs))),
-    {rule,?line(hd(Cs)),Name,Arity,check_clauses(Cs, Name, Arity)}.
+    {rule,Attrs,Name,Arity,check_clauses(Cs, Name, Arity)}.
 
 %% build_fun(Line, [Clause]) -> {'fun',Line,{clauses,[Clause]}}.
 
@@ -1097,16 +1170,6 @@ func_prec() -> {800,700}.
 
 max_prec() -> 900.
 
-%%% [Experimental]. The parser just copies the attributes of the
-%%% scanner tokens to the abstract format. This design decision has
-%%% been hidden to some extent: use set_line() and get_attribute() to
-%%% access the second element of (almost all) of the abstract format
-%%% tuples. A typical use is to negate line numbers to prevent the
-%%% compiler from emitting warnings and errors. The second element can
-%%% (of course) be set to any value, but then these functions no
-%%% longer apply. To get all present attributes as a property list
-%%% get_attributes() should be used.
-
 set_line(L, F) ->
     erl_scan:set_attribute(line, L, F).
 
@@ -1116,4 +1179,18 @@ get_attribute(L, Name) ->
 get_attributes(L) ->
     erl_scan:attributes_info(L).
 
-%% vim: ft=erlang
+range(L, N) ->
+    range(L, ?line(N), N).
+
+range(A1, A2, N) when is_list(A1), is_list(A2), is_list(?line(N)) ->
+    case {get_attribute(A1, range),get_attribute(A2, range),
+          get_attribute(?line(N), range)} of
+        {{range,{B1,E1}},{range,{B2,E2}},{range,{OldB,OldE}}} ->
+            Range = {lists:min([B1,B2,OldB]),lists:max([E1,E2,OldE])},
+            Attrs = lists:keystore(range, 1, ?line(N), {range,Range}),
+            setelement(2, N, Attrs);
+        _ ->
+            N
+    end;
+range(_, _, N) ->
+    N.

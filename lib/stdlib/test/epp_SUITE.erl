@@ -1559,6 +1559,7 @@ run_test(Config, Test0) ->
     ?line File = filename:join(PrivDir, Filename),
     ?line ok = file:write_file(File, Test),
     Opts = [return, {i,PrivDir},{outdir,PrivDir}],
+    io:format("~p~n", [{File,Opts}]),
     ?line {ok, epp_test, []} = compile:file(File, Opts),
     AbsFile = filename:rootname(File, ".erl"),
     ?line {module, epp_test} = code:load_abs(AbsFile, epp_test),

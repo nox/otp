@@ -61,7 +61,8 @@
               uses = dict:new()                 %Macro use structure
                   :: dict:dict(name(), [{argspec(), [used()]}]),
               default_encoding = ?DEFAULT_ENCODING :: source_encoding(),
-	      pre_opened = false :: boolean()
+              pre_opened = false :: boolean(),
+              range = false :: boolean()
 	     }).
 
 %%% Note on representation: as tokens, both {var, Location, Name} and
@@ -238,7 +239,7 @@ parse_file(Ifile, Path, Predefs) ->
                   {'macros', PredefMacros :: macros()} |
                   {'default_encoding', DefEncoding :: source_encoding()} |
                   {'location', Location} |
-                  'extra'],
+                  'range' | 'extra'],
       Form :: erl_parse:abstract_form() | {'error', ErrorInfo} |
               {'eof', Location},
       Location :: erl_scan:location(),
@@ -551,7 +552,7 @@ init_server(Pid, Name, Options, St0) ->
                     proplists:get_value(includes, Options, [])],
             St = St0#epp{delta=0, name=Name, name2=Name,
 			 path=Path, macs=Ms1,
-			 default_encoding=DefEncoding},
+			 default_encoding=DefEncoding, range=lists:member(range, Options)},
             From = wait_request(St),
             enter_file_reply(From, Name, AtLocation, AtLocation),
             wait_req_scan(St);
@@ -606,6 +607,10 @@ user_predef([M|Pdm], Ms) when is_atom(M) ->
     end;
 user_predef([Md|_Pdm], _Ms) -> {error,{bad,Md}};
 user_predef([], Ms) -> {ok,Ms}.
+
+-spec scan_options(#epp{}) -> ['range'].
+scan_options(#epp{range = Range}) ->
+  [ range || Range ].
 
 %% wait_request(EppState) -> RequestFrom
 %% wait_req_scan(EppState)
@@ -741,7 +746,7 @@ leave_file(From, St) ->
 %% scan_toks(Tokens, From, EppState)
 
 scan_toks(From, St) ->
-    case io:scan_erl_form(St#epp.file, '', St#epp.location) of
+    case io:scan_erl_form(St#epp.file, '', St#epp.location, scan_options(St)) of
 	{ok,Toks,Cl} ->
 	    scan_toks(Toks, From, St#epp{location=Cl});
 	{error,E,Cl} ->
@@ -1176,15 +1181,17 @@ expand_macros(Type, MacT, M, Toks, Ms0) ->
     %% (Type will always be 'atom')
     {Ms, U} = Ms0,
     Lm = loc(MacT),
-    Tinfo = element(2, MacT),
     case expand_macro1(Type, Lm, M, Toks, Ms) of
 	{ok,{none,Exp}} ->
 	    check_uses([{{Type,M}, none}], [], U, Lm),
-	    Toks1 = expand_macros(expand_macro(Exp, Tinfo, [], dict:new()), Ms0),
-	    expand_macros(Toks1++Toks, Ms0);
+	    Tinfo = element(2, MacT),
+	    Toks1 = expand_macro(Exp, Tinfo, [], dict:new()),
+	    Toks2 = expand_macros(Toks1, Ms0),
+	    expand_macros(Toks2++Toks, Ms0);
 	{ok,{As,Exp}} ->
 	    check_uses([{{Type,M}, length(As)}], [], U, Lm),
-	    {Bs,Toks1} = bind_args(Toks, Lm, M, As, dict:new()),
+	    {Bs,Lrp,Toks1} = bind_args(Toks, Lm, M, As, dict:new()),
+	    Tinfo = element(2, erl_parse:range_end(Lrp, MacT)),
 	    expand_macros(expand_macro(Exp, Tinfo, Toks1, Bs), Ms0)
     end.
 
@@ -1231,14 +1238,14 @@ get_macro_uses({M,Arity}, U) ->
 
 %% Macro expansion
 %% Note: io:scan_erl_form() does not return comments or white spaces.
-expand_macros([{'?',_Lq},{atom,_Lm,M}=MacT|Toks], Ms) ->
-    expand_macros(atom, MacT, M, Toks, Ms);
+expand_macros([{'?',Lq},{atom,Lm,M}=MacT|Toks], Ms) ->
+    expand_macros(atom, erl_parse:range(Lq, Lm, MacT), M, Toks, Ms);
 %% Special macros
-expand_macros([{'?',_Lq},{var,Lm,'LINE'}=Tok|Toks], Ms) ->
+expand_macros([{'?',Lq},{var,Lm,'LINE'}=Tok|Toks], Ms) ->
     {line,Line} = erl_scan:token_info(Tok, line),
-    [{integer,Lm,Line}|expand_macros(Toks, Ms)];
-expand_macros([{'?',_Lq},{var,_Lm,M}=MacT|Toks], Ms) ->
-    expand_macros(atom, MacT, M, Toks, Ms);
+    [erl_parse:range(Lq, Lm, {integer,Lm,Line})|expand_macros(Toks, Ms)];
+expand_macros([{'?',Lq},{var,Lm,M}=MacT|Toks], Ms) ->
+    expand_macros(atom, erl_parse:range(Lq, Lm, MacT), M, Toks, Ms);
 %% Illegal macros
 expand_macros([{'?',_Lq},Token|_Toks], _Ms) ->
     T = case erl_scan:token_info(Token, text) of
@@ -1256,16 +1263,16 @@ expand_macros([], _Ms) -> [].
 %% bind_args(Tokens, MacroLocation, MacroName, ArgumentVars, Bindings)
 %%  Collect the arguments to a macro call.
 
-bind_args([{'(',_Llp},{')',_Lrp}|Toks], _Lm, _M, [], Bs) ->
-    {Bs,Toks};
+bind_args([{'(',_Llp},{')',Lrp}|Toks], _Lm, _M, [], Bs) ->
+    {Bs,Lrp,Toks};
 bind_args([{'(',_Llp}|Toks0], Lm, M, [A|As], Bs) ->
     {Arg,Toks1} = macro_arg(Toks0, [], []),
     macro_args(Toks1, Lm, M, As, store_arg(Lm, M, A, Arg, Bs));
 bind_args(_Toks, Lm, M, _As, _Bs) ->
     throw({error,Lm,{mismatch,M}}). % Cannot happen.
 
-macro_args([{')',_Lrp}|Toks], _Lm, _M, [], Bs) ->
-    {Bs,Toks};
+macro_args([{')',Lrp}|Toks], _Lm, _M, [], Bs) ->
+    {Bs,Lrp,Toks};
 macro_args([{',',_Lc}|Toks0], Lm, M, [A|As], Bs) ->
     {Arg,Toks1} = macro_arg(Toks0, [], []),
     macro_args(Toks1, Lm, M, As, store_arg(Lm, M, A, Arg, Bs));
@@ -1369,10 +1376,8 @@ expand_macro([T|Ts], L, Rest, Bs) ->
     [setelement(2, T, L)|expand_macro(Ts, L, Rest, Bs)];
 expand_macro([], _L, Rest, _Bs) -> Rest.
 
-expand_arg([A|As], Ts, _L, Rest, Bs) ->
-    %% It is not obvious that the location of arguments should replace L.
-    NextL = element(2, A),
-    [A|expand_arg(As, Ts, NextL, Rest, Bs)];
+expand_arg([A|As], Ts, L, Rest, Bs) ->
+    [A|expand_arg(As, Ts, L, Rest, Bs)];
 expand_arg([], Ts, L, Rest, Bs) ->
     expand_macro(Ts, L, Rest, Bs).
 
@@ -1399,9 +1404,11 @@ stringify1([]) ->
 stringify1([T | Tokens]) ->
     [io_lib:format(" ~ts", [token_src(T)]) | stringify1(Tokens)].
 
-stringify(Ts, L) ->
+stringify([T|_]=Ts, _L) ->
     [$\s | S] = lists:flatten(stringify1(Ts)),
-    [{string, L, S}].
+    Lb = element(2, T),
+    Le = element(2, lists:last(Ts)),
+    [erl_parse:range_end(Le, {string, Lb, S})].
 
 %% epp_request(Epp)
 %% epp_request(Epp, Request)
