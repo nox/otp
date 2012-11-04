@@ -288,6 +288,9 @@ lists(Config) when is_list(Config) ->
     %% lists:last/1
     ?line ?TestHighOrder_1(last, List),
 
+    %% lists:nth/2
+    ?line ?TestHighOrder_2(nth, 17, List),
+
     %% Cleanup.
     erase(?MODULE),
 
@@ -319,6 +322,8 @@ lists(Config) when is_list(Config) ->
         (catch lists:dropwhile(fun (_) -> true end, not_a_list)),
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_list],_}|_]}} =
         (catch lists:last(not_a_list)),
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[1,not_a_list],_}|_]}} =
+        (catch lists:nth(1, not_a_list)),
 
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
         (catch lists:map(not_a_function, [])),
@@ -342,6 +347,11 @@ lists(Config) when is_list(Config) ->
         (catch lists:mapfoldr(not_a_function, acc, [])),
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
         (catch lists:dropwhile(not_a_function, [])),
+
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[0,List],_}|_]}} =
+        (catch lists:nth(0, List)),
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_number,[]],_}|_]}} =
+        (catch lists:nth(not_a_number, [])),
 
     ok.
 		       

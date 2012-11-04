@@ -842,6 +842,7 @@ pi() -> 3.1416.
       <item><seealso marker="stdlib:lists#foldr/3">lists:foldr/3</seealso></item>
       <item><seealso marker="stdlib:lists#mapfoldl/3">lists:mapfoldl/3</seealso></item>
       <item><seealso marker="stdlib:lists#mapfoldr/3">lists:mapfoldr/3</seealso></item>
+      <item><seealso marker="stdlib:lists#nth/2">lists:nth/2</seealso></item>
     </list>
   </section>
 

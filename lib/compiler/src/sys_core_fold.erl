@@ -1137,6 +1137,37 @@ call_1(#c_call{anno=Anno}, lists, last, [Arg1], Sub) ->
                 body=#c_letrec{defs=[{Loop,Fun}],
                                body=#c_apply{anno=Anno, op=Loop, args=[L]}}},
          Sub);
+call_1(#c_call{anno=Anno}, lists, nth, [Arg1,Arg2], Sub) ->
+    Loop = #c_var{name={'lists^nth',2}},
+    N = #c_var{name='N'},
+    Xs = #c_var{name='Xs'},
+    X = #c_var{name='X'},
+    One = #c_literal{val=1},
+    C1 = #c_clause{pats=[#c_tuple{es=[One, #c_cons{hd=X, tl=Xs}]}],
+                   guard=#c_literal{val=true},
+                   body=X},
+    C2 = #c_clause{pats=[#c_tuple{es=[N, #c_cons{hd=X, tl=Xs}]}],
+                   guard=#c_call{module=#c_literal{val=erlang},
+                                 name=#c_literal{val='>'},
+                                 args=[N, One]},
+                   body=#c_let{vars=[N],
+                               arg=#c_call{anno=Anno,
+                                           module=#c_literal{val=erlang},
+                                           name=#c_literal{val='-'},
+                                           args=[N, One]},
+                               body=#c_apply{anno=Anno,
+                                             op=Loop,
+                                             args=[N, Xs]}}},
+    Err = #c_tuple{es=[#c_literal{val=function_clause}, N, Xs]},
+    C3 = #c_clause{pats=[#c_tuple{es=[N, Xs]}], guard=#c_literal{val=true},
+                   body=match_fail([{function_name,{'lists^nth',2}}|Anno], Err)},
+    Fun = #c_fun{vars=[N, Xs],
+                 body=#c_case{arg=#c_tuple{es=[N, Xs]}, clauses=[C1, C2, C3]}},
+    L = #c_var{name='L'},
+    expr(#c_let{vars=[N, L], arg=#c_values{es=[Arg1, Arg2]},
+                body=#c_letrec{defs=[{Loop,Fun}],
+                               body=#c_apply{anno=Anno, op=Loop, args=[N, L]}}},
+         Sub);
 call_1(#c_call{module=M, name=N}=Call, _, _, As, Sub) ->
     call_0(Call, M, N, As, Sub).
 
