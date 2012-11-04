@@ -279,6 +279,12 @@ lists(Config) when is_list(Config) ->
     ?line ?TestHighOrder_2(delete, 17, List),
     ?line ?TestHighOrder_2(delete, 21, List),
 
+    %% lists:dropwhile/2
+    ?line ?TestHighOrder_2(dropwhile, (fun(E) ->
+        put(?MODULE, [E|get(?MODULE)]),
+        true
+    end), List),
+
     %% Cleanup.
     erase(?MODULE),
 
@@ -306,6 +312,8 @@ lists(Config) when is_list(Config) ->
         (catch lists:append(not_a_list)),
     ?line {'EXIT',{function_clause,[{?MODULE,_,[item,not_a_list],_}|_]}} =
         (catch lists:delete(item, not_a_list)),
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[_,not_a_list],_}|_]}} =
+        (catch lists:dropwhile(fun (_) -> true end, not_a_list)),
 
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
         (catch lists:map(not_a_function, [])),
@@ -327,6 +335,8 @@ lists(Config) when is_list(Config) ->
         (catch lists:mapfoldl(not_a_function, acc, [])),
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,acc,[]],_}|_]}} =
         (catch lists:mapfoldr(not_a_function, acc, [])),
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
+        (catch lists:dropwhile(not_a_function, [])),
 
     ok.
 		       
