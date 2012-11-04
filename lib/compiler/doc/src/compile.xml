@@ -833,6 +833,7 @@ pi() -> 3.1416.
       <item><seealso marker="stdlib:lists#append/1">lists:append/1</seealso></item>
       <item><seealso marker="stdlib:lists#delete/2">lists:delete/2</seealso></item>
       <item><seealso marker="stdlib:lists#dropwhile/2">lists:dropwhile/2</seealso></item>
+      <item><seealso marker="stdlib:lists#last/1">lists:last/1</seealso></item>
       <item><seealso marker="stdlib:lists#foreach/2">lists:foreach/2</seealso></item>
       <item><seealso marker="stdlib:lists#map/2">lists:map/2</seealso></item>
       <item><seealso marker="stdlib:lists#flatmap/2">lists:flatmap/2</seealso></item>

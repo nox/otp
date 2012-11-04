@@ -1118,6 +1118,25 @@ call_1(#c_call{anno=Anno}, lists, dropwhile, [Arg1,Arg2], Sub) ->
                 body=#c_letrec{defs=[{Loop,Fun}],
                                body=#c_apply{anno=Anno, op=Loop, args=[L]}}},
          Sub);
+call_1(#c_call{anno=Anno}, lists, last, [Arg1], Sub) ->
+    Loop = #c_var{name={'lists^last',1}},
+    Xs = #c_var{name='Xs'},
+    X = #c_var{name='X'},
+    C1 = #c_clause{pats=[#c_cons{hd=X, tl=#c_literal{val=[]}}],
+                   guard=#c_literal{val=true},
+                   body=X},
+    C2 = #c_clause{pats=[#c_cons{hd=X, tl=Xs}], guard=#c_literal{val=true},
+                   body=#c_apply{anno=Anno, op=Loop, args=[Xs]}},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
+                   body=match_fail([{function_name,{'lists^last',1}}|Anno], Err)},
+    Fun = #c_fun{vars=[Xs],
+                 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
+    L = #c_var{name='L'},
+    expr(#c_let{vars=[L], arg=#c_values{es=[Arg1]},
+                body=#c_letrec{defs=[{Loop,Fun}],
+                               body=#c_apply{anno=Anno, op=Loop, args=[L]}}},
+         Sub);
 call_1(#c_call{module=M, name=N}=Call, _, _, As, Sub) ->
     call_0(Call, M, N, As, Sub).
 

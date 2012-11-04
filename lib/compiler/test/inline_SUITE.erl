@@ -285,6 +285,9 @@ lists(Config) when is_list(Config) ->
         true
     end), List),
 
+    %% lists:last/1
+    ?line ?TestHighOrder_1(last, List),
+
     %% Cleanup.
     erase(?MODULE),
 
@@ -314,6 +317,8 @@ lists(Config) when is_list(Config) ->
         (catch lists:delete(item, not_a_list)),
     ?line {'EXIT',{function_clause,[{?MODULE,_,[_,not_a_list],_}|_]}} =
         (catch lists:dropwhile(fun (_) -> true end, not_a_list)),
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_list],_}|_]}} =
+        (catch lists:last(not_a_list)),
 
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
         (catch lists:map(not_a_function, [])),
