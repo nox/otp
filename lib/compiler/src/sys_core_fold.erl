@@ -1055,6 +1055,34 @@ call_1(#c_call{anno=Anno}, lists, append, [Arg1], Sub) ->
                 body=#c_letrec{defs=[{Loop,Fun}],
                                body=#c_apply{anno=Anno, op=Loop, args=[L]}}},
          Sub);
+call_1(#c_call{anno=Anno}, lists, delete, [Arg1,Arg2], Sub) ->
+    Loop = #c_var{name={'lists^delete',1}},
+    Item = #c_var{name='Item'},
+    Xs = #c_var{name='Xs'},
+    X = #c_var{name='X'},
+    C1 = #c_clause{pats=[#c_cons{hd=X, tl=Xs}],
+                   guard=#c_call{module=#c_literal{val=erlang},
+                                 name=#c_literal{val='=:='},
+                                 args=[X, Item]},
+                   body=Xs},
+    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+                   body=#c_literal{val=[]}},
+    C3 = #c_clause{pats=[#c_cons{hd=X, tl=Xs}], guard=#c_literal{val=true},
+                   body=#c_cons{anno=[compiler_generated],
+                                hd=X,
+                                tl=#c_apply{anno=Anno,
+                                            op=Loop,
+                                            args=[Xs]}}},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Item, Xs]},
+    C4 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
+                   body=match_fail([{function_name,{'lists^delete',1}}|Anno], Err)},
+    Fun = #c_fun{vars=[Xs],
+                 body=#c_case{arg=Xs, clauses=[C1, C2, C3, C4]}},
+    L = #c_var{name='L'},
+    expr(#c_let{vars=[Item, L], arg=#c_values{es=[Arg1, Arg2]},
+                body=#c_letrec{defs=[{Loop,Fun}],
+                               body=#c_apply{anno=Anno, op=Loop, args=[L]}}},
+         Sub);
 call_1(#c_call{module=M, name=N}=Call, _, _, As, Sub) ->
     call_0(Call, M, N, As, Sub).
 

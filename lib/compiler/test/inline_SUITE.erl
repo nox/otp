@@ -275,6 +275,10 @@ lists(Config) when is_list(Config) ->
     NestedList = lists:duplicate(5, List),
     ?line ?TestHighOrder_1(append, NestedList),
 
+    %% lists:delete/2
+    ?line ?TestHighOrder_2(delete, 17, List),
+    ?line ?TestHighOrder_2(delete, 21, List),
+
     %% Cleanup.
     erase(?MODULE),
 
@@ -300,6 +304,8 @@ lists(Config) when is_list(Config) ->
         (catch lists:mapfoldr(fun (X, Acc) -> {X,Acc} end, acc, not_a_list)),
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_list],_}|_]}} =
         (catch lists:append(not_a_list)),
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[item,not_a_list],_}|_]}} =
+        (catch lists:delete(item, not_a_list)),
 
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
         (catch lists:map(not_a_function, [])),
