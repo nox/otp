@@ -158,6 +158,18 @@ load_and_call(Out, Module) ->
 
 %% Macros used by lists/1 below.
 
+-define(TestHighOrder_1(Name, List),
+    begin
+        put(?MODULE, []),
+        (fun({Res,Res2}) ->
+             {Res,Res2} = my_apply(lists, Name, [List], [])
+         end)(begin
+              (fun(R) ->
+                   {R,get(?MODULE)}
+               end)(lists:Name(List))
+          end)
+     end).
+
 -define(TestHighOrder_2(Name, Body, List),
 	begin
 	    put(?MODULE, []),
@@ -253,6 +265,16 @@ lists(Config) when is_list(Config) ->
         {bnot E,A bxor (bnot E)}
 	end), 0, List),
 
+    %% lists:mapfoldr/3
+    ?line ?TestHighOrder_3(mapfoldr, (fun(E, A) ->
+    put(?MODULE, [E|get(?MODULE)]),
+        {bnot E,A bxor (bnot E)}
+    end), 0, List),
+
+    %% lists:append/1
+    NestedList = lists:duplicate(5, List),
+    ?line ?TestHighOrder_1(append, NestedList),
+
     %% Cleanup.
     erase(?MODULE),
 
@@ -276,6 +298,8 @@ lists(Config) when is_list(Config) ->
         (catch lists:mapfoldl(fun (X, Acc) -> {X,Acc} end, acc, not_a_list)),
     ?line {'EXIT',{function_clause,[{?MODULE,_,[_,acc,not_a_list],_}|_]}} =
         (catch lists:mapfoldr(fun (X, Acc) -> {X,Acc} end, acc, not_a_list)),
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_list],_}|_]}} =
+        (catch lists:append(not_a_list)),
 
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
         (catch lists:map(not_a_function, [])),

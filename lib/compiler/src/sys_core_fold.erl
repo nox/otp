@@ -1028,6 +1028,33 @@ call_1(#c_call{anno=Anno}, lists, mapfoldr, [Arg1,Arg2,Arg3], Sub) ->
 %%% 							args=[L, A]},
 %%% 					   body=#c_tuple{es=[Xs, A]}}}},
 	 Sub);
+call_1(#c_call{anno=Anno}, lists, append, [Arg1], Sub) ->
+    Loop = #c_var{name={'lists^append',1}},
+    Xs = #c_var{name='Xs'},
+    X = #c_var{name='X'},
+    C1 = #c_clause{pats=[#c_cons{hd=X, tl=#c_literal{val=[]}}],
+		   guard=#c_literal{val=true},
+                   body=X},
+    C2 = #c_clause{pats=[#c_cons{hd=X, tl=Xs}], guard=#c_literal{val=true},
+                   body=#c_call{anno=[compiler_generated|Anno],
+                                module=#c_literal{val=erlang},
+                                name=#c_literal{val='++'},
+                                args=[X,
+                                      #c_apply{anno=Anno,
+                                      op=Loop,
+                                      args=[Xs]}]}},
+    C3 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+                   body=#c_literal{val=[]}},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    C4 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
+                   body=match_fail([{function_name,{'lists^append',1}}|Anno], Err)},
+    Fun = #c_fun{vars=[Xs],
+                 body=#c_case{arg=Xs, clauses=[C1, C2, C3, C4]}},
+    L = #c_var{name='L'},
+    expr(#c_let{vars=[L], arg=#c_values{es=[Arg1]},
+                body=#c_letrec{defs=[{Loop,Fun}],
+                               body=#c_apply{anno=Anno, op=Loop, args=[L]}}},
+         Sub);
 call_1(#c_call{module=M, name=N}=Call, _, _, As, Sub) ->
     call_0(Call, M, N, As, Sub).
 

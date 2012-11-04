@@ -830,6 +830,7 @@ pi() -> 3.1416.
     <list type="bulleted">
       <item><seealso marker="stdlib:lists#all/1">lists:all/1</seealso></item>
       <item><seealso marker="stdlib:lists#any/1">lists:any/1</seealso></item>
+      <item><seealso marker="stdlib:lists#append/1">lists:append/1</seealso></item>
       <item><seealso marker="stdlib:lists#foreach/2">lists:foreach/2</seealso></item>
       <item><seealso marker="stdlib:lists#map/2">lists:map/2</seealso></item>
       <item><seealso marker="stdlib:lists#flatmap/2">lists:flatmap/2</seealso></item>
