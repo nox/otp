@@ -295,6 +295,13 @@ lists(Config) when is_list(Config) ->
     ?line ?TestHighOrder_2(nthtail, 0, List),
     ?line ?TestHighOrder_2(nthtail, 17, List),
 
+    %% lists:prefix/2
+    ?line ?TestHighOrder_2(prefix, [], List),
+    ?line ?TestHighOrder_2(prefix, List--[20], List),
+    ?line ?TestHighOrder_2(prefix, List, []),
+    ?line ?TestHighOrder_2(prefix, List, List),
+    ?line ?TestHighOrder_2(prefix, List++[21], List),
+
     %% Cleanup.
     erase(?MODULE),
 
@@ -332,6 +339,10 @@ lists(Config) when is_list(Config) ->
         (catch lists:nthtail(0, not_a_list)),
     ?line {'EXIT',{function_clause,[{?MODULE,_,[1,not_a_list],_}|_]}} =
         (catch lists:nthtail(1, not_a_list)),
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_list,[]],_}|_]}} =
+        (catch lists:prefix(not_a_list, [])),
+    ?line {'EXIT',{function_clause,[{?MODULE,_,[[],not_a_list],_}|_]}} =
+        (catch lists:prefix([], not_a_list)),
 
     ?line {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
         (catch lists:map(not_a_function, [])),
