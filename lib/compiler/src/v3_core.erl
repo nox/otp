@@ -570,9 +570,9 @@ expr({'catch',L,E0}, St0) ->
     {E1,Eps,St1} = expr(E0, St0),
     Lanno = lineno_anno(L, St1),
     {#icatch{anno=#a{anno=Lanno},body=Eps ++ [E1]},[],St1};
-expr({'fun',L,{function,F,A},{_,_,_}=Id}, St) ->
+expr({'fun',L,{function,F,A}}, St) ->
     Lanno = lineno_anno(L, St),
-    {#c_var{anno=Lanno++[{id,Id}],name={F,A}},[],St};
+    {#c_var{anno=Lanno,name={F,A}},[],St};
 expr({'fun',L,{function,M,F,A}}, St0) ->
     {As,Aps,St1} = safe_list([M,F,A], St0),
     Lanno = lineno_anno(L, St1),
