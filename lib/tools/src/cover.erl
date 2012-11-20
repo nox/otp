@@ -1882,6 +1882,10 @@ munge_qs([{b_generate,Line,Pattern,Expr}|Qs], Vars, MQs) ->
     L = element(2, Expr),
     {MExpr, Vars2} = munge_expr(Expr, Vars),
     munge_qs1(Qs, L, {b_generate,Line,Pattern,MExpr}, Vars, Vars2, MQs);
+munge_qs([{zip_generate,Line,Left,Right}|Qs], Vars, MQs) ->
+    {[MLeft], Vars2} = munge_qs([Left], Vars, MQs),
+    {[MRight], Vars3} = munge_qs([Right], Vars2, MQs),
+    munge_qs1(Qs, Line, {zip_generate,Line,MLeft,MRight}, Vars, Vars3, MQs);
 munge_qs([Expr|Qs], Vars, MQs) ->
     L = element(2, Expr),
     {MungedExpr, Vars2} = munge_expr(Expr, Vars),

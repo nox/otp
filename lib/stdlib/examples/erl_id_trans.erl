@@ -535,6 +535,10 @@ lc_bc_quals([{b_generate,Line,P0,E0}|Qs]) ->
     E1 = expr(E0),
     P1 = pattern(P0),
     [{b_generate,Line,P1,E1}|lc_bc_quals(Qs)];
+lc_bc_quals([{zip_generate,Line,L0,R0}|Qs]) ->
+    [L1] = lc_bc_quals([L0]),
+    [R1] = lc_bc_quals([R0]),
+    [{zip_generate,Line,L1,R1}|lc_bc_quals(Qs)];
 lc_bc_quals([E0|Qs]) ->
     E1 = expr(E0),
     [E1|lc_bc_quals(Qs)];

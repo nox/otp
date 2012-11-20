@@ -450,6 +450,11 @@ lc_tq(Line, [{b_generate,Lg,P0,G0}|Qs0], St0) ->
     {P1,St2} = pattern(P0, St1),
     {Qs1,St3} = lc_tq(Line, Qs0, St2),
     {[{b_generate,Lg,P1,G1}|Qs1],St3};
+lc_tq(Line, [{zip_generate,Lg,L0,R0} | Qs0], St0) ->
+    {[L1],St1} = lc_tq(Line, [L0], St0),
+    {[R1],St2} = lc_tq(Line, [R0], St1),
+    {Qs1,St3} = lc_tq(Line, Qs0, St2),
+    {[{zip_generate,Lg,L1,R1} | Qs1],St3};
 lc_tq(Line, [F0 | Qs0], St0) ->
     case erl_lint:is_guard_test(F0) of
         true ->

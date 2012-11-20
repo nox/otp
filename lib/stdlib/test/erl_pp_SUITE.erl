@@ -47,6 +47,7 @@
 	  hook/1,
 	  neg_indent/1,
 	  maps_syntax/1,
+          eep19/1,
 
 	  otp_6321/1, otp_6911/1, otp_6914/1, otp_8150/1, otp_8238/1,
 	  otp_8473/1, otp_8522/1, otp_8567/1, otp_8664/1, otp_9147/1,
@@ -77,7 +78,7 @@ groups() ->
     [{expr, [],
       [func, call, recs, try_catch, if_then, receive_after,
        bits, head_tail, cond1, block, case1, ops,
-       messages, old_mnemosyne_syntax, maps_syntax
+       messages, old_mnemosyne_syntax, maps_syntax, eep19
     ]},
      {attributes, [], [misc_attrs, import_export, dialyzer_attrs]},
      {tickets, [],
@@ -1203,6 +1204,11 @@ otp_11100(Config) when is_list(Config) ->
                     [{foo,bar},{type,1,integer,[]}]}]},
              []}}),
     ok.
+
+eep19(Config) when is_list(Config) ->
+    ok = pp_expr("[ {X,Y} || X <- Xs && Y <- Ys ]"),
+    ok = pp_expr("[ {X,Y} || X <- Xs && Y <- Ys && Z <- Zs ]"),
+    ok = pp_expr("[ {X,Y} || X <- Xs && <<Y>> <= Ys ]").
 
 pf(Form) ->
     lists:flatten(erl_pp:form(Form,none)).

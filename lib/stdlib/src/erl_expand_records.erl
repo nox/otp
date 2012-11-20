@@ -495,31 +495,32 @@ conj([{{Name,_Rp},L,R,Sz} | AL], E) ->
 %% lc_tq(Line, Qualifiers, State) ->
 %%      {[TransQual],State'}
 
-lc_tq(Line, [{generate,Lg,P0,G0} | Qs0], St0) ->
-    {G1,St1} = expr(G0, St0),
-    {P1,St2} = pattern(P0, St1),
-    {Qs1,St3} = lc_tq(Line, Qs0, St2),
-    {[{generate,Lg,P1,G1} | Qs1],St3};
-lc_tq(Line, [{b_generate,Lg,P0,G0} | Qs0], St0) ->
-    {G1,St1} = expr(G0, St0),
-    {P1,St2} = pattern(P0, St1),
-    {Qs1,St3} = lc_tq(Line, Qs0, St2),
-    {[{b_generate,Lg,P1,G1} | Qs1],St3};
-lc_tq(Line, [F0 | Qs0], St0) ->
-    %% Allow record/2 and expand out as guard test.
-    case erl_lint:is_guard_test(F0) of
-        true ->
-            {F1,St1} = guard_test(F0, St0),
-            {Qs1,St2} = lc_tq(Line, Qs0, St1),
-            {[F1|Qs1],St2};
-        false ->
-            {F1,St1} = expr(F0, St0),
-            {Qs1,St2} = lc_tq(Line, Qs0, St1),
-            {[F1 | Qs1],St2}
-    end;
+
+lc_tq(Line, [Q0 | Qs0], St0) ->
+    {Q1,St1} = lc_qual(Q0, St0),
+    {Qs1,St2} = lc_tq(Line, Qs0, St1),
+    {[Q1 | Qs1],St2};
 lc_tq(_Line, [], St0) ->
     {[],St0#exprec{checked_ra = []}}.
 
+lc_qual({zip_generate,Lg,L0,R0}, St0) ->
+    {L1,St1} = lc_qual(L0, St0),
+    {R1,St2} = lc_qual(R0, St1),
+    {{zip_generate,Lg,L1,R1},St2};
+lc_qual({generate,Lg,P0,G0}, St0) ->
+    {G1,St1} = expr(G0, St0),
+    {P1,St2} = pattern(P0, St1),
+    {{generate,Lg,P1,G1},St2};
+lc_qual({b_generate,Lg,P0,G0}, St0) ->
+    {G1,St1} = expr(G0, St0),
+    {P1,St2} = pattern(P0, St1),
+    {{b_generate,Lg,P1,G1},St2};
+lc_qual(F0, St0) ->
+    %% Allow record/2 and expand out as guard test.
+    case erl_lint:is_guard_test(F0) of
+        true -> guard_test(F0, St0);
+        false -> expr(F0, St0)
+    end.
 
 %% normalise_fields([RecDef]) -> [Field].
 %%  Normalise the field definitions to always have a default value. If

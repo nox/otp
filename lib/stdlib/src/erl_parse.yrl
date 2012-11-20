@@ -31,6 +31,7 @@ expr_max
 list tail
 list_comprehension lc_expr lc_exprs
 binary_comprehension
+gen_expr gen_expr_100 gen_expr_150
 tuple
 %struct
 record_expr record_tuple record_field record_fields
@@ -42,7 +43,7 @@ function_call argument_list
 exprs guard
 atomic strings
 prefix_op mult_op add_op list_op comp_op
-rule rule_clauses rule_clause rule_body
+rule rule_clauses rule_clause rule_body rule_exprs
 binary bin_elements bin_element bit_expr
 opt_bit_size_expr bit_size_expr opt_bit_type_list bit_type_list bit_type
 top_type top_type_100 top_types type typed_expr typed_attr_val
@@ -64,6 +65,7 @@ char integer float atom string var
 '==' '/=' '=<' '<' '>=' '>' '=:=' '=/=' '<=' '=>' ':='
 '<<' '>>'
 '!' '=' '::' '..' '...'
+'&&'
 'spec' 'callback' % helper
 dot.
 
@@ -326,8 +328,17 @@ lc_exprs -> lc_expr : ['$1'].
 lc_exprs -> lc_expr ',' lc_exprs : ['$1'|'$3'].
 
 lc_expr -> expr : '$1'.
-lc_expr -> expr '<-' expr : {generate,?line('$2'),'$1','$3'}.
-lc_expr -> binary '<=' expr : {b_generate,?line('$2'),'$1','$3'}.
+lc_expr -> gen_expr : '$1'.
+
+gen_expr -> gen_expr_100 : '$1'.
+
+gen_expr_100 -> gen_expr_150 '&&' gen_expr_100 :
+	{zip_generate,?line('$2'),'$1','$3'}.
+gen_expr_100 -> gen_expr_150 : '$1'.
+
+gen_expr_150 -> expr '<-' expr : {generate,?line('$2'),'$1','$3'}.
+gen_expr_150 -> binary '<=' expr : {b_generate,?line('$2'),'$1','$3'}.
+
 
 tuple -> '{' '}' : {tuple,?line('$1'),[]}.
 tuple -> '{' exprs '}' : {tuple,?line('$1'),'$2'}.
@@ -529,7 +540,11 @@ rule_clauses -> rule_clause ';' rule_clauses : ['$1'|'$3'].
 rule_clause -> atom clause_args clause_guard rule_body :
 	{clause,?line('$1'),element(3, '$1'),'$2','$3','$4'}.
 
-rule_body -> ':-' lc_exprs: '$2'.
+rule_body -> ':-' rule_exprs: '$2'.
+
+rule_exprs -> expr : ['$1'].
+rule_exprs -> expr ',' rule_exprs : ['$1'|'$3'].
+rule_exprs -> gen_expr_150 ',' rule_exprs : ['$1'|'$3'].
 
 
 Erlang code.

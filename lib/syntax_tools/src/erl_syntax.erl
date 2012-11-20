@@ -305,6 +305,9 @@
 	 variable_literal/1,
 	 warning_marker/1,
 	 warning_marker_info/1,
+         zip_generator/2,
+         zip_generator_left/1,
+         zip_generator_right/1,
 
 	 tree/1,
 	 tree/2,
@@ -483,7 +486,7 @@
 %%  </tr><tr>
 %%   <td>variable</td>
 %%   <td>warning_marker</td>
-%%   <td></td>
+%%   <td>zip_generator</td>
 %%   <td></td>
 %%  </tr>
 %% </table></center>
@@ -549,6 +552,7 @@
 %% @see underscore/0
 %% @see variable/1
 %% @see warning_marker/1
+%% @see zip_generator/1
 
 -spec type(syntaxTree()) -> atom().
 
@@ -613,6 +617,7 @@ type(Node) ->
 	{rule, _, _, _, _} -> rule;
 	{'try', _, _, _, _, _} -> try_expr;
 	{tuple, _, _} -> tuple;
+        {zip_generate, _, _, _} -> zip_generator;
 	_ ->
 	    erlang:error({badarg, Node})
     end.
@@ -5043,6 +5048,72 @@ binary_generator_body(Node) ->
 
 
 %% =====================================================================
+%% @doc Creates an abstract zip_generator. The result represents
+%% "<code><em>Left</em> &amp;&amp; <em>Right</em></code>".
+%%
+%% @see zip_generator_left/1
+%% @see zip_generator_right/1
+%% @see list_comp/2
+%% @see binary_comp/2
+
+-record(zip_generator, {left :: syntaxTree(), right :: syntaxTree()}).
+
+%% type(Node) = zip_generator
+%% data(Node) = #zip_generator{left :: Left, right :: Right}
+%%
+%%      Left = Argument = syntaxTree()
+%%
+%% `erl_parse' representation:
+%%
+%% {zip_generate, Pos, Left, Right}
+%%
+%%      Left = Right = erl_parse()
+
+-spec zip_generator(syntaxTree(), syntaxTree()) -> syntaxTree().
+
+zip_generator(Left, Right) ->
+    tree(zip_generator, #zip_generator{left = Left, right = Right}).
+
+revert_zip_generator(Node) ->
+    Pos = get_pos(Node),
+    Left = zip_generator_left(Node),
+    Right = zip_generator_right(Node),
+    {zip_generate, Pos, Left, Right}.
+
+
+%% =====================================================================
+%% @doc Returns the left subtree of a `generator' node.
+%%
+%% @see zip_generator/2
+
+-spec zip_generator_left(syntaxTree()) -> syntaxTree().
+
+zip_generator_left(Node) ->
+    case unwrap(Node) of
+        {zip_generate, _, Left, _} ->
+            Left;
+        Node1 ->
+            (data(Node1))#zip_generator.left
+    end.
+
+
+%% =====================================================================
+%% @doc Returns the right subtree of a `generator' node.
+%%
+%% @see zip_generator/2
+
+-spec zip_generator_right(syntaxTree()) -> syntaxTree().
+
+zip_generator_right(Node) ->
+    case unwrap(Node) of
+        {zip_generate, _, _, Right} ->
+            Right;
+        Node1 ->
+            (data(Node1))#zip_generator.right
+    end.
+
+
+%% =====================================================================
 %% @doc Creates an abstract block expression. If `Body' is
 %% `[B1, ..., Bn]', the result represents "<code>begin
 %% <em>B1</em>, ..., <em>Bn</em> end</code>".
@@ -6356,6 +6427,8 @@ revert_root(Node) ->
 	    revert_variable(Node);
 	warning_marker ->
 	    revert_warning_marker(Node);
+        zip_generator ->
+            revert_zip_generator(Node);
 	_ ->
 	    %% Non-revertible new-form node
 	    Node
@@ -6640,7 +6713,10 @@ subtrees(T) ->
 		     try_expr_handlers(T),
 		     try_expr_after(T)];
 		tuple ->
-		    [tuple_elements(T)]
+		    [tuple_elements(T)];
+                zip_generator ->
+                    [[zip_generator_left(T)],
+                     [zip_generator_right(T)]]
 	    end
     end.
 
@@ -6738,7 +6814,8 @@ make_tree(record_index_expr, [[T], [F]]) ->
 make_tree(rule, [[N], C]) -> rule(N, C);
 make_tree(size_qualifier, [[N], [A]]) -> size_qualifier(N, A);
 make_tree(try_expr, [B, C, H, A]) -> try_expr(B, C, H, A);
-make_tree(tuple, [E]) -> tuple(E).
+make_tree(tuple, [E]) -> tuple(E);
+make_tree(zip_generator, [[L], [R]]) -> zip_generator(L, R).
 
 
 %% =====================================================================

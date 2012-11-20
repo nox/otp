@@ -3100,12 +3100,15 @@ lc_quals(Qs, Vt0, St0) ->
     {Vt,Uvt,St} = lc_quals(Qs, Vt0, [], St0#lint{recdef_top = false}),
     {Vt,Uvt,St#lint{recdef_top = OldRecDef}}.
 
-lc_quals([{generate,_Line,P,E} | Qs], Vt0, Uvt0, St0) ->
-    {Vt,Uvt,St} = handle_generator(P,E,Vt0,Uvt0,St0),
+lc_quals([{generate,_,_,_}=Gen|Qs], Vt0, Uvt0, St0) ->
+    {Vt,Uvt,St} = lc_gen(Gen, Vt0, Uvt0, St0),
     lc_quals(Qs, Vt, Uvt, St);
-lc_quals([{b_generate,_Line,P,E} | Qs], Vt0, Uvt0, St0) ->
+lc_quals([{b_generate,_,P,_}=Gen|Qs], Vt0, Uvt0, St0) ->
     St1 = handle_bitstring_gen_pat(P,St0),
-    {Vt,Uvt,St} = handle_generator(P,E,Vt0,Uvt0,St1),
+    {Vt,Uvt,St} = lc_gen(Gen, Vt0, Uvt0, St1),
+    lc_quals(Qs, Vt, Uvt, St);
+lc_quals([{zip_generate,_,_,_}=Gen|Qs], Vt0, Uvt0, St0) ->
+    {Vt,Uvt,St} = lc_gen(Gen, Vt0, Uvt0, St0),
     lc_quals(Qs, Vt, Uvt, St);
 lc_quals([F|Qs], Vt, Uvt, St0) ->
     {Fvt,St1} = case is_guard_test2(F, St0#lint.records) of
@@ -3116,12 +3119,25 @@ lc_quals([F|Qs], Vt, Uvt, St0) ->
 lc_quals([], Vt, Uvt, St) ->
     {Vt, Uvt, St}.
 
-handle_generator(P,E,Vt,Uvt,St0) ->
-    {Evt,St1} = expr(E, Vt, St0),
+lc_gen(Gen, Vt, Uvt, St) ->
+    {Ps,Es} = lc_gen_parts(Gen),
+    handle_generator(Ps, Es, Vt, Uvt, St).
+
+lc_gen_parts({generate,_Line,P,E}) ->
+    {[P],[E]};
+lc_gen_parts({b_generate,_Line,P,E}) ->
+    {[P],[E]};
+lc_gen_parts({zip_generate,_Line,L,R}) ->
+    {[LP],[LE]} = lc_gen_parts(L),
+    {RPs,REs} = lc_gen_parts(R),
+    {[LP|RPs],[LE|REs]}.
+
+handle_generator(Ps, Es, Vt, Uvt, St0) ->
+    {Evt,St1} = expr_list(Es, Vt, St0),
     %% Forget variables local to E immediately.
     Vt1 = vtupdate(vtold(Evt, Vt), Vt),
     {_, St2} = check_unused_vars(Evt, Vt, St1),
-    {Pvt,Binvt,St3} = pattern(P, Vt1, [], [], St2),
+    {Pvt,Binvt,St3} = pattern_list(Ps, Vt1, [], [], St2),
     %% Have to keep fresh variables separated from used variables somehow
     %% in order to handle for example X = foo(), [X || <<X:X>> <- bar()].
     %%                                1           2      2 1

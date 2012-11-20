@@ -103,7 +103,8 @@
 -record(iset,      {anno=#a{},var,arg}).
 -record(itry,      {anno=#a{},args,vars,body,evars,handler}).
 -record(ifilter,   {anno=#a{},arg}).
--record(igen,      {anno=#a{},acc_pat,acc_guard,skip_pat,tail,tail_pat,arg}).
+-record(igen,      {anno=#a{},acc_pats,acc_guard,skip_pats,
+                    tails,tail_pats,args}).
 
 -type iapply()    :: #iapply{}.
 -type ibinary()   :: #ibinary{}.
@@ -970,41 +971,45 @@ fun_tq({_,_,Name}=Id, Cs0, L, St0, NameInfo) ->
 %% lc_tq(Line, Exp, [Qualifier], Mc, State) -> {LetRec,[PreExp],State}.
 %%  This TQ from Simon PJ pp 127-138.  
 
-lc_tq(Line, E, [#igen{anno=GAnno,acc_pat=AccPat,acc_guard=AccGuard,
-                      skip_pat=SkipPat,tail=Tail,tail_pat=TailPat,
-                      arg={Pre,Arg}}|Qs], Mc, St0) ->
+lc_tq(Line, E, [#igen{anno=GAnno,acc_pats=AccPats,acc_guard=AccGuard,
+                      skip_pats=SkipPats,tails=Tails,tail_pats=TailPats,
+                      args={Pre,Args}}|Qs], Mc, St0) ->
     {Name,St1} = new_fun_name("lc", St0),
     LA = lineno_anno(Line, St1),
     LAnno = #a{anno=LA},
-    F = #c_var{anno=LA,name={Name,1}},
-    Nc = #iapply{anno=GAnno,op=F,args=[Tail]},
-    {Var,St2} = new_var(St1),
-    Fc = function_clause([Var], LA, {Name,1}),
-    TailClause = #iclause{anno=LAnno,pats=[TailPat],guard=[],body=[Mc]},
-    Cs0 = case {AccPat,AccGuard} of
-              {SkipPat,[]} ->
+    LA = lineno_anno(Line, St1),
+    LAnno = #a{anno=LA},
+    Arity = length(Args),
+    F = #c_var{anno=LA,name={Name,Arity}},
+    Nc = #iapply{anno=GAnno,op=F,args=Tails},
+    {Vars,St2} = new_vars(Arity, St1),
+    Fc = function_clause(Vars, LA, {Name,Arity}),
+    TailClause = #iclause{anno=LAnno,pats=TailPats,guard=[],body=[Mc]},
+    Cs0 = case {AccPats,AccGuard} of
+              {SkipPats,[]} ->
                   %% Skip and accumulator patterns are the same and there is
                   %% no guard, no need to generate a skip clause.
                   [TailClause];
               _ ->
                   [#iclause{anno=#a{anno=[compiler_generated|LA]},
-                            pats=[SkipPat],guard=[],body=[Nc]},
+                            pats=SkipPats,guard=[],body=[Nc]},
                    TailClause]
           end,
-    {Cs,St4} = case AccPat of
+    {Cs,St4} = case AccPats of
                    nomatch ->
                        %% The accumulator pattern never matches, no need
                        %% for an accumulator clause.
                        {Cs0,St2};
                    _ ->
                        {Lc,Lps,St3} = lc_tq(Line, E, Qs, Nc, St2),
-                       {[#iclause{anno=LAnno,pats=[AccPat],guard=AccGuard,
+                       {[#iclause{anno=LAnno,pats=AccPats,guard=AccGuard,
                                   body=Lps ++ [Lc]}|Cs0],
                         St3}
                end,
-    Fun = #ifun{anno=LAnno,id=[],vars=[Var],clauses=Cs,fc=Fc},
-    {#iletrec{anno=LAnno#a{anno=[list_comprehension|LA]},defs=[{{Name,1},Fun}],
-              body=Pre ++ [#iapply{anno=LAnno,op=F,args=[Arg]}]},
+    Fun = #ifun{anno=LAnno,id=[],vars=Vars,clauses=Cs,fc=Fc},
+    {#iletrec{anno=LAnno#a{anno=[list_comprehension|LA]},
+              defs=[{{Name,Arity},Fun}],
+              body=Pre ++ [#iapply{anno=LAnno,op=F,args=Args}]},
      [],St4};
 lc_tq(Line, E, [#ifilter{}=Filter|Qs], Mc, St) ->
     filter_tq(Line, E, Filter, Mc, St, Qs, fun lc_tq/5);
@@ -1030,29 +1035,30 @@ bc_tq(Line, Exp, Qs0, _, St0) ->
 			    args=[Sz]}}] ++ BcPre,
     {E,Pre,St}.
 
-bc_tq1(Line, E, [#igen{anno=GAnno,acc_pat=AccPat,acc_guard=AccGuard,
-                       skip_pat=SkipPat,tail=Tail,tail_pat=TailPat,
-                       arg={Pre,Arg}}|Qs], Mc, St0) ->
+bc_tq1(Line, E, [#igen{anno=GAnno,acc_pats=AccPats,acc_guard=AccGuard,
+                       skip_pats=SkipPats,tails=Tails,tail_pats=TailPats,
+                       args={Pre,Args}}|Qs], Mc, St0) ->
     {Name,St1} = new_fun_name("lbc", St0),
     LA = lineno_anno(Line, St1),
     LAnno = #a{anno=LA},
-    {Vars=[_,AccVar],St2} = new_vars(LA, 2, St1),
-    F = #c_var{anno=LA,name={Name,2}},
-    Nc = #iapply{anno=GAnno,op=F,args=[Tail,AccVar]},
-    Fc = function_clause(Vars, LA, {Name,2}),
-    TailClause = #iclause{anno=LAnno,pats=[TailPat,AccVar],guard=[],
+    Arity = length(Args) + 1,
+    {Vars=[AccVar|_],St2} = new_vars(LA, Arity, St1),
+    F = #c_var{anno=LA,name={Name,Arity}},
+    Nc = #iapply{anno=GAnno,op=F,args=[AccVar|Tails]},
+    Fc = function_clause(Vars, LA, {Name,Arity}),
+    TailClause = #iclause{anno=LAnno,pats=[AccVar|TailPats],guard=[],
                           body=[AccVar]},
-    Cs0 = case {AccPat,AccGuard} of
-              {SkipPat,[]} ->
+    Cs0 = case {AccPats,AccGuard} of
+              {SkipPats,[]} ->
                   %% Skip and accumulator patterns are the same and there is
                   %% no guard, no need to generate a skip clause.
                   [TailClause];
               _ ->
                   [#iclause{anno=#a{anno=[compiler_generated|LA]},
-                            pats=[SkipPat,AccVar],guard=[],body=[Nc]},
+                            pats=[AccVar|SkipPats],guard=[],body=[Nc]},
                    TailClause]
           end,
-    {Cs,St4} = case AccPat of
+    {Cs,St4} = case AccPats of
                    nomatch ->
                        %% The accumulator pattern never matches, no need
                        %% for an accumulator clause.
@@ -1061,13 +1067,14 @@ bc_tq1(Line, E, [#igen{anno=GAnno,acc_pat=AccPat,acc_guard=AccGuard,
                        {Bc,Bps,St3} = bc_tq1(Line, E, Qs, AccVar, St2),
                        Body = Bps ++ [#iset{var=AccVar,arg=Bc},Nc],
                        {[#iclause{anno=LAnno,
-                                  pats=[AccPat,AccVar],guard=AccGuard,
+                                  pats=[AccVar|AccPats],guard=AccGuard,
                                   body=Body}|Cs0],
                         St3}
                end,
     Fun = #ifun{anno=LAnno,id=[],vars=Vars,clauses=Cs,fc=Fc},
-    {#iletrec{anno=LAnno#a{anno=[list_comprehension|LA]},defs=[{{Name,2},Fun}],
-              body=Pre ++ [#iapply{anno=LAnno,op=F,args=[Arg,Mc]}]},
+    {#iletrec{anno=LAnno#a{anno=[list_comprehension|LA]},
+              defs=[{{Name,Arity},Fun}],
+              body=Pre ++ [#iapply{anno=LAnno,op=F,args=[Mc|Args]}]},
      [],St4};
 bc_tq1(Line, E, [#ifilter{}=Filter|Qs], Mc, St) ->
     filter_tq(Line, E, Filter, Mc, St, Qs, fun bc_tq1/5);
@@ -1155,21 +1162,22 @@ preprocess_quals(_, [], St, Acc) ->
 
 is_generator({generate,_,_,_}) -> true;
 is_generator({b_generate,_,_,_}) -> true;
+is_generator({zip_generate,_,_,_}) -> true;
 is_generator(_) -> false.
 
 %%
 %% Generators are abstracted as sextuplets:
-%%  - acc_pat is the accumulator pattern, e.g. [Pat|Tail] for Pat <- Expr.
+%%  - acc_pats are the accumulator patterns, e.g. [Pat|Tail] for Pat <- Expr.
 %%  - acc_guard is the list of guards immediately following the current
 %%    generator in the qualifier list input.
-%%  - skip_pat is the skip pattern, e.g. <<X,_:X,Tail/bitstring>> for
+%%  - skip_pats are the skip patterns, e.g. <<X,_:X,Tail/bitstring>> for
 %%    <<X,1:X>> <= Expr.
-%%  - tail is the variable used in AccPat and SkipPat bound to the rest of the
-%%    generator input.
-%%  - tail_pat is the tail pattern, respectively [] and <<_/bitstring>> for list
-%%    and bit string generators.
-%%  - arg is a pair {Pre,Arg} where Pre is the list of expressions to be
-%%    inserted before the comprehension function and Arg is the expression
+%%  - tails are the variable used in AccPats and SkipPats bound to the rest of
+%%    the generators' inputs.
+%%  - tail_pats are the tail patterns, respectively [] and <<_/bitstring>> for
+%%    list and bit string generators.
+%%  - args is a pair {Pre,Args} where Pre is the list of expressions to be
+%%    inserted before the comprehension function and Args are the expressions
 %%    that it should be passed.
 %%
 
@@ -1199,8 +1207,9 @@ generator(Line, {generate,Lg,P0,E}, Gs, St0) ->
                                 ann_c_cons(LA, Skip, Tail)}
                        end,
     {Ce,Pre,St4} = safe(E, St3),
-    Gen = #igen{anno=#a{anno=GA},acc_pat=AccPat,acc_guard=Cg,skip_pat=SkipPat,
-                tail=Tail,tail_pat=#c_literal{anno=LA,val=[]},arg={Pre,Ce}},
+    Gen = #igen{anno=#a{anno=GA},acc_pats=[AccPat],acc_guard=Cg,
+                skip_pats=[SkipPat],tails=[Tail],
+                tail_pats=[#c_literal{anno=LA,val=[]}],args={Pre,[Ce]}},
     {Gen,St4};
 generator(Line, {b_generate,Lg,P,E}, Gs, St0) ->
     LA = lineno_anno(Line, St0),
@@ -1214,10 +1223,29 @@ generator(Line, {b_generate,Lg,P,E}, Gs, St0) ->
     {SkipSegs,St3} = emasculate_segments(AccSegs, St2),
     SkipPat = Cp#c_binary{segments=SkipSegs},
     {Ce,Pre,St4} = safe(E, St3),
-    Gen = #igen{anno=#a{anno=GA},acc_pat=AccPat,acc_guard=Cg,skip_pat=SkipPat,
-                tail=Tail,tail_pat=#c_binary{anno=LA,segments=[TailSeg]},
-                arg={Pre,Ce}},
-    {Gen,St4}.
+    Gen = #igen{anno=#a{anno=GA},acc_pats=[AccPat],acc_guard=Cg,
+                skip_pats=[SkipPat],tails=[Tail],
+                tail_pats=[#c_binary{anno=LA,segments=[TailSeg]}],
+                args={Pre,[Ce]}},
+    {Gen,St4};
+generator(Line, {zip_generate,Lg,L,R}, Gs, St0) ->
+    GA = lineno_anno(Lg, St0),
+    {LGen,St1} = generator(Line, L, [], St0),
+    {RGen,St2} = generator(Line, R, [], St1),
+    {AccGuard,St3} = lc_guard_tests(Gs, St2),
+    #igen{acc_pats=LAccPats,acc_guard=[],skip_pats=LSkipPats,
+          tails=LTails,tail_pats=LTailPats,args={LPre,LArgs}} = LGen,
+    #igen{acc_pats=RAccPats,acc_guard=[],skip_pats=RSkipPats,
+          tails=RTails,tail_pats=RTailPats,args={RPre,RArgs}} = RGen,
+    AccPats = case LAccPats =:= nomatch orelse RAccPats =:= nomatch of
+                  false -> LAccPats ++ RAccPats;
+                  true -> nomatch
+              end,
+    Gen = #igen{anno=#a{anno=GA},acc_pats=AccPats,acc_guard=AccGuard,
+                skip_pats=LSkipPats ++ RSkipPats,tails=LTails ++ RTails,
+                tail_pats=LTailPats ++ RTailPats,
+                args={LPre ++ RPre,LArgs ++ RArgs}},
+    {Gen,St3}.
 
 append_tail_segment(Segs, St0) ->
     {Var,St} = new_var(St0),

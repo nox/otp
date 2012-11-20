@@ -809,6 +809,10 @@ clauses(Type, Opts, Cs) ->
 lc_quals(Qs, Opts) ->
     {prefer_nl,[$,],lexprs(Qs, fun lc_qual/2, Opts)}.
 
+lc_qual({zip_generate,_,Gen1,Gen2}, Opts) ->
+    PGen1 = lc_qual(Gen1, Opts),
+    PGen2 = lc_qual(Gen2, Opts),
+    {list,[{step,[PGen1,leaf(" &&")],PGen2}]};
 lc_qual({b_generate,_,Pat,E}, Opts) ->
     Pl = lexpr(Pat, 0, Opts),
     {list,[{step,[Pl,leaf(" <=")],lexpr(E, 0, Opts)}]};
