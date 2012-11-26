@@ -2072,11 +2072,9 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
 	ERTS_DECL_AM(debug);
 	BIF_RET(AM_debug);
 #elif defined(PURIFY)
-	ERTS_DECL_AM(purify);
-	BIF_RET(AM_purify);
+	BIF_RET(am_purify);
 #elif defined(QUANTIFY)
-	ERTS_DECL_AM(quantify);
-	BIF_RET(AM_quantify);
+	BIF_RET(am_quantify);
 #elif defined(PURECOV)
 	ERTS_DECL_AM(purecov);
 	BIF_RET(AM_purecov);
@@ -2499,7 +2497,7 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
 	    BIF_ERROR(BIF_P, EXC_INTERNAL_ERROR);
 	}
 #endif
-    } else if (ERTS_IS_ATOM_STR("schedulers_online", BIF_ARG_1)) {
+    } else if (am_schedulers_online == BIF_ARG_1) {
 #ifndef ERTS_SMP
 	BIF_RET(make_small(1));
 #else
@@ -3353,7 +3351,7 @@ BIF_RETTYPE erts_debug_get_internal_state_1(BIF_ALIST_1)
 	    BIF_RET(am_false);
 #endif
 	}
-	else if (ERTS_IS_ATOM_STR("memory", BIF_ARG_1)) {
+	else if (am_memory == BIF_ARG_1) {
 	    Eterm res;
 	    erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
 	    erts_smp_thr_progress_block();
@@ -3610,9 +3608,9 @@ BIF_RETTYPE erts_debug_set_internal_state_2(BIF_ALIST_2)
 		BIF_RET(am_true);
 	    }
 	}
-	else if (ERTS_IS_ATOM_STR("block", BIF_ARG_1)
+	else if (am_block == BIF_ARG_1
 		 || ERTS_IS_ATOM_STR("sleep", BIF_ARG_1)) {
-	    int block = ERTS_IS_ATOM_STR("block", BIF_ARG_1);
+	    int block = am_block == BIF_ARG_1;
 	    Sint ms;
 	    if (term_to_Sint(BIF_ARG_2, &ms) != 0) {
 		if (ms > 0) {
@@ -4048,7 +4046,7 @@ BIF_RETTYPE erts_debug_lock_counters_1(BIF_ALIST_1)
 		    opt = ERTS_LCNT_OPT_PROCLOCK;
 		} else if (ERTS_IS_ATOM_STR("port_locks", tp[1])) {
 		    opt = ERTS_LCNT_OPT_PORTLOCK;
-		} else if (ERTS_IS_ATOM_STR("suspend", tp[1])) {
+		} else if (am_suspend == tp[1]) {
 		    opt = ERTS_LCNT_OPT_SUSPEND;
 		} else if (ERTS_IS_ATOM_STR("location", tp[1])) {
 		    opt = ERTS_LCNT_OPT_LOCATION;

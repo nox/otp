@@ -326,7 +326,7 @@ BIF_RETTYPE erl_ddll_try_load_3(BIF_ALIST_3)
 		    add_proc_loaded(dh, BIF_P);
 		    erts_ddll_reference_driver(dh);
 		    monitor = 0;
-		    ok_term = mkatom("already_loaded");
+		    ok_term = am_already_loaded;
 		}
 	    } else if (dh->status == ERL_DE_UNLOAD ||
 		       dh->status == ERL_DE_FORCE_UNLOAD) {
@@ -348,7 +348,7 @@ BIF_RETTYPE erl_ddll_try_load_3(BIF_ALIST_3)
 		add_proc_loaded(dh, BIF_P);
 		erts_ddll_reference_driver(dh);
 		monitor = 0;
-		ok_term = mkatom("already_loaded");
+		ok_term = am_already_loaded;
 	    } else if (dh->status == ERL_DE_RELOAD ||
 		       dh->status == ERL_DE_FORCE_RELOAD) {
 		if (reload != 0) {
@@ -386,7 +386,7 @@ BIF_RETTYPE erl_ddll_try_load_3(BIF_ALIST_3)
 	    add_proc_loaded(dh, BIF_P);
 	    first_ddll_reference(dh);
 	    monitor = 0;
-	    ok_term = mkatom("loaded");
+	    ok_term = am_loaded;
 	}
     }
     assert_drv_list_rwlocked();

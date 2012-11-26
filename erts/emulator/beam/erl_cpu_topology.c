@@ -1618,7 +1618,7 @@ erts_get_cpu_topology_term(Process *c_p, Eterm which)
     Eterm res;
     int type;
     erts_smp_rwmtx_rlock(&cpuinfo_rwmtx);
-    if (ERTS_IS_ATOM_STR("used", which))
+    if (am_used == which)
 	type = ERTS_GET_USED_CPU_TOPOLOGY;
     else if (ERTS_IS_ATOM_STR("detected", which))
 	type = ERTS_GET_DETECTED_CPU_TOPOLOGY;

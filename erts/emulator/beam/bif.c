@@ -4275,7 +4275,7 @@ BIF_RETTYPE system_flag_2(BIF_ALIST_2)
 	    what = ERTS_SCHED_STAT_MODIFY_DISABLE;
 	else if (ERTS_IS_ATOM_STR("enable", BIF_ARG_2))
 	    what = ERTS_SCHED_STAT_MODIFY_ENABLE;
-	else if (ERTS_IS_ATOM_STR("clear", BIF_ARG_2))
+	else if (BIF_ARG_2 == am_clear)
 	    what = ERTS_SCHED_STAT_MODIFY_CLEAR;
 	else
 	    goto error;
