@@ -741,18 +741,18 @@ Eterm enif_make_badarg(ErlNifEnv* env)
 int enif_get_atom(ErlNifEnv* env, Eterm atom, char* buf, unsigned len,
 		  ErlNifCharEncoding encoding)
 {
-    Atom* ap;
+    size_t alen;
+    byte* name;
     ASSERT(encoding == ERL_NIF_LATIN1);
-    if (is_not_atom(atom)) {
+    if (!erts_atom_name(atom, &alen, &name)) {
 	return 0;
     }
-    ap = atom_tab(atom_val(atom));
-    if (ap->len+1 > len) {
+    if (alen > len) {
 	return 0;
     }
-    sys_memcpy(buf, ap->name, ap->len);
-    buf[ap->len] = '\0';
-    return ap->len + 1;
+    sys_memcpy(buf, name, alen);
+    buf[alen] = '\0';
+    return alen + 1;
 }
 
 int enif_get_int(ErlNifEnv* env, Eterm term, int* ip)
@@ -850,12 +850,8 @@ int enif_get_double(ErlNifEnv* env, ERL_NIF_TERM term, double* dp)
 int enif_get_atom_length(ErlNifEnv* env, Eterm atom, unsigned* len,
 			 ErlNifCharEncoding enc)
 {
-    Atom* ap;
     ASSERT(enc == ERL_NIF_LATIN1);
-    if (is_not_atom(atom)) return 0;
-    ap = atom_tab(atom_val(atom));
-    *len = ap->len;
-    return 1;
+    return erts_atom_name(atom, (size_t*) &len, NULL);
 }
 
 int enif_get_list_cell(ErlNifEnv* env, Eterm term, Eterm* head, Eterm* tail)
@@ -1504,8 +1500,10 @@ void erts_print_nif_taints(int to, void* to_arg)
     struct tainted_module_t* t;
     const char* delim = "";
     for (t=first_tainted_module ; t!=NULL; t=t->next) {
-	const Atom* atom = atom_tab(atom_val(t->module_atom));
-	erts_print(to,to_arg,"%s%.*s", delim, atom->len, atom->name);
+	size_t len;
+	byte* name;
+	erts_atom_name(t->module_atom, &len, &name);
+	erts_print(to, to_arg, "%s%.*s", delim, len, name);
 	delim = ",";
     }
     erts_print(to,to_arg,"\n");

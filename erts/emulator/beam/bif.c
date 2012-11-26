@@ -2606,18 +2606,17 @@ BIF_RETTYPE atom_to_list_1(BIF_ALIST_1)
 {
     Uint need;
     Eterm* hp;
-    Atom* ap;
+    size_t len;
+    byte* name;
 
-    if (is_not_atom(BIF_ARG_1))
+    if (!erts_atom_name(BIF_ARG_1, &len, &name)) {
 	BIF_ERROR(BIF_P, BADARG);
-     
-    /* read data from atom table */
-    ap = atom_tab(atom_val(BIF_ARG_1));
-    if (ap->len == 0)
+    } else if (len == 0) {
 	BIF_RET(NIL);	/* the empty atom */
-    need = ap->len*2;
+    }
+    need = len*2;
     hp = HAlloc(BIF_P, need);
-    BIF_RET(buf_to_intlist(&hp,(char*)ap->name,ap->len, NIL));
+    BIF_RET(buf_to_intlist(&hp, (char*)name, len, NIL));
 }
 
 /**********************************************************************/

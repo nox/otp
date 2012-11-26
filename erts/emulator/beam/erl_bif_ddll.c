@@ -391,7 +391,7 @@ BIF_RETTYPE erl_ddll_try_load_3(BIF_ALIST_3)
     }
     assert_drv_list_rwlocked();
     if (kill_ports) {
- 	/* Avoid closing the driver by referencing it */
+	/* Avoid closing the driver by referencing it */
 	erts_ddll_reference_driver(dh);
 	ASSERT(dh->status == ERL_DE_RELOAD);
 	dh->status = ERL_DE_FORCE_RELOAD;
@@ -1774,12 +1774,13 @@ static ErrcodeEntry errcode_tab[] = {
 static int errdesc_to_code(Eterm errdesc, int *code /* out */)
 {
     int i;
-    if (is_atom(errdesc)) {
-	Atom *ap = atom_tab(atom_val(errdesc)); 
+    size_t alen;
+    byte* aname;
+    if (erts_atom_name(errdesc, &alen, &aname)) {
 	for (i = 0; errcode_tab[i].atm != NULL; ++i) {
 	    int len = sys_strlen(errcode_tab[i].atm);
-	    if (len == ap->len && 
-		!sys_strncmp(errcode_tab[i].atm,(char *) ap->name,len)) {
+	    if (len == alen &&
+		!sys_strncmp(errcode_tab[i].atm,(char *) aname,len)) {
 		*code = errcode_tab[i].code;
 		return 0;
 	    }
@@ -1842,16 +1843,17 @@ static char *pick_list_or_atom(Eterm name_term)
 { 
     char *name = NULL;
     ErlDrvSizeT name_len;
-    if (is_atom(name_term)) {
-	Atom *ap = atom_tab(atom_val(name_term));
-	if (ap->len == 0) {
+    size_t len;
+    byte *aname;
+    if (erts_atom_name(name_term, &len, &aname)) {
+	if (len == 0) {
 	    /* If io_lists with zero length is not allowed, 
 	       then the empty atom shouldn't */
 	    goto error;
 	}
-	name = erts_alloc(ERTS_ALC_T_DDLL_TMP_BUF, ap->len + 1);
-	memcpy(name,ap->name,ap->len);
-	name[ap->len] = '\0';
+	name = erts_alloc(ERTS_ALC_T_DDLL_TMP_BUF, len + 1);
+	memcpy(name, aname, len);
+	name[len] = '\0';
     } else {
 	if (erts_iolist_size(name_term, &name_len)) {
 	    goto error;

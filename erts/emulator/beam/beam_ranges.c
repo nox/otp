@@ -316,6 +316,7 @@ lookup_loc(FunctionInfo* fi, BeamInstr* orig_pc, BeamInstr* modp, int idx)
 	    high = mid;
 	} else if (pc < mid[1]) {
 	    int file;
+	    size_t len;
 	    int index = mid - (Eterm *) (BeamInstr) line[MI_LINE_FUNC_TAB];
 
 	    if (line[MI_LINE_LOC_SIZE] == 2) {
@@ -335,11 +336,11 @@ lookup_loc(FunctionInfo* fi, BeamInstr* orig_pc, BeamInstr* modp, int idx)
 	    file = LOC_FILE(fi->loc);
 	    if (file == 0) {
 		/* Special case: Module name with ".erl" appended */
-		Atom* mod_atom = atom_tab(atom_val(fi->current[0]));
-		fi->needed += 2*(mod_atom->len+4);
+		erts_atom_name(fi->current[0], &len, NULL);
+		fi->needed += 2*(len+4);
 	    } else {
-		Atom* ap = atom_tab(atom_val((fi->fname_ptr)[file-1]));
-		fi->needed += 2*ap->len;
+		erts_atom_name((fi->fname_ptr)[file-1], &len, NULL);
+		fi->needed += 2*len;
 	    }
 	    return;
 	} else {

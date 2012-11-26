@@ -651,14 +651,13 @@ open_port(Process* p, Eterm name, Eterm settings, int *err_typep, int *err_nump)
      */
     
     if (is_atom(name) || (i = is_string(name))) {
+        size_t len;
+        byte* aname;
 	/* a vanilla port */
-	if (is_atom(name)) {
-	    name_buf = (char *) erts_alloc(ERTS_ALC_T_TMP,
-					   atom_tab(atom_val(name))->len+1);
-	    sys_memcpy((void *) name_buf,
-		       (void *) atom_tab(atom_val(name))->name, 
-		       atom_tab(atom_val(name))->len);
-	    name_buf[atom_tab(atom_val(name))->len] = '\0';
+	if (erts_atom_name(name, &len, &aname)) {
+	    name_buf = (char *) erts_alloc(ERTS_ALC_T_TMP, len+1);
+	    sys_memcpy((void *) name_buf, (void *) aname, len);
+	    name_buf[len] = '\0';
 	} else {
 	    name_buf = (char *) erts_alloc(ERTS_ALC_T_TMP, i + 1);
 	    if (intlist_to_buf(name, name_buf, i) != i)
@@ -678,17 +677,16 @@ open_port(Process* p, Eterm name, Eterm settings, int *err_typep, int *err_nump)
 	}
     
 	if (*tp == am_spawn || *tp == am_spawn_driver) {	/* A process port */
+	    size_t len;
+	    byte* aname;
 	    if (arity != make_arityval(2)) {
 		goto badarg;
 	    }
 	    name = tp[1];
-	    if (is_atom(name)) {
-		name_buf = (char *) erts_alloc(ERTS_ALC_T_TMP,
-					       atom_tab(atom_val(name))->len+1);
-		sys_memcpy((void *) name_buf,
-			   (void *) atom_tab(atom_val(name))->name, 
-			   atom_tab(atom_val(name))->len);
-		name_buf[atom_tab(atom_val(name))->len] = '\0';
+	    if (erts_atom_name(name, &len, &aname)) {
+		name_buf = (char *) erts_alloc(ERTS_ALC_T_TMP, len + 1);
+		sys_memcpy((void *) name_buf, (void *) aname, len);
+		name_buf[len] = '\0';
 	    } else if ((i = is_string(name))) {
 		name_buf = (char *) erts_alloc(ERTS_ALC_T_TMP, i + 1);
 		if (intlist_to_buf(name, name_buf, i) != i)

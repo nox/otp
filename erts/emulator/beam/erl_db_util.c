@@ -3105,13 +3105,13 @@ int db_eq_comp(DbTableCommon* tb, Eterm a, DbTerm* b)
 int db_is_variable(Eterm obj)
 {
     byte *b;
-    int n;
+    size_t n;
     int N;
 
     if (is_not_atom(obj))
         return -1;
-    b = atom_tab(atom_val(obj))->name;
-    if ((n = atom_tab(atom_val(obj))->len) < 2)
+    erts_atom_name(obj, &n, &b);
+    if (n < 2)
         return -1;
     if (*b++ != '$')
         return -1;

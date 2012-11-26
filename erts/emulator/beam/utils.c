@@ -2507,11 +2507,12 @@ tailrecur_ne:
 		    ErlFunThing* f1 = (ErlFunThing *) fun_val_rel(a,a_base);
 		    ErlFunThing* f2 = (ErlFunThing *) fun_val_rel(b,b_base);
 		    Sint diff;
+		    size_t f1_mod_len, f2_mod_len;
+		    byte *f1_mod, *f2_mod;
 
-		    diff = cmpbytes(atom_tab(atom_val(f1->fe->module))->name,
-				    atom_tab(atom_val(f1->fe->module))->len,
-				    atom_tab(atom_val(f2->fe->module))->name,
-				    atom_tab(atom_val(f2->fe->module))->len);
+		    erts_atom_name(f1->fe->module, &f1_mod_len, &f1_mod);
+		    erts_atom_name(f2->fe->module, &f2_mod_len, &f2_mod);
+		    diff = cmpbytes(f1_mod, f1_mod_len, f2_mod, f2_mod_len);
 		    if (diff != 0) {
 			RETURN_NEQ(diff);
 		    }
@@ -3732,8 +3733,10 @@ void upp(byte *buf, size_t sz)
 
 void pat(Eterm atom)
 {
-    upp(atom_tab(atom_val(atom))->name,
-	atom_tab(atom_val(atom))->len);
+    size_t len;
+    byte* name;
+    erts_atom_name(atom, &len, &name);
+    upp(name, len);
 }
 
 

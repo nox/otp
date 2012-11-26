@@ -177,12 +177,12 @@ dump_element(int to, void *to_arg, Eterm x)
     } else if (is_boxed(x)) {
 	erts_print(to, to_arg, "H" WORD_FMT, boxed_val(x));
     } else if (is_immed(x)) {
-	if (is_atom(x)) {
-	    unsigned char* s = atom_tab(atom_val(x))->name;
-	    int len = atom_tab(atom_val(x))->len;
+	byte* s;
+	size_t len;
+	if (erts_atom_name(x, &len, &s)) {
 	    int i;
 
-	    erts_print(to, to_arg, "A%X:", atom_tab(atom_val(x))->len);
+	    erts_print(to, to_arg, "A%X:", len);
 	    for (i = 0; i < len; i++) {
 		erts_putc(to, to_arg, *s++);
 	    }

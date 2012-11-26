@@ -1803,32 +1803,31 @@ static BIF_RETTYPE utf8_to_list(Process* p, Eterm arg)
 
 BIF_RETTYPE atom_to_binary_2(BIF_ALIST_2)
 {
-    Atom* ap;
+    size_t len;
+    byte* name;
 
-    if (is_not_atom(BIF_ARG_1)) {
+    if (!erts_atom_name(BIF_ARG_1, &len, &name)) {
 	goto error;
     }
 
-    ap = atom_tab(atom_val(BIF_ARG_1));
-
     if (BIF_ARG_2 == am_latin1) {
-	BIF_RET(new_binary(BIF_P, ap->name, ap->len));
+	BIF_RET(new_binary(BIF_P, name, len));
     } else if (BIF_ARG_2 == am_utf8 || BIF_ARG_2 == am_unicode) {
 	int bin_size = 0;
 	int i;
 	Eterm bin_term;
 	byte* bin_p;
 
-	for (i = 0; i < ap->len; i++) {
-	    bin_size += (ap->name[i] >= 0x80) ? 2 : 1;
+	for (i = 0; i < len; i++) {
+	    bin_size += (name[i] >= 0x80) ? 2 : 1;
 	}
-	if (bin_size == ap->len) {
-	    BIF_RET(new_binary(BIF_P, ap->name, ap->len));
+	if (bin_size == len) {
+	    BIF_RET(new_binary(BIF_P, name, len));
 	}
 	bin_term = new_binary(BIF_P, 0, bin_size);
 	bin_p = binary_bytes(bin_term);
-	for (i = 0; i < ap->len; i++) {
-	    byte b = ap->name[i];
+	for (i = 0; i < len; i++) {
+	    byte b = name[i];
 	    if (b < 0x80) {
 		*bin_p++ = b;
 	    } else {
@@ -2143,23 +2142,23 @@ Sint erts_native_filename_need(Eterm ioterm, int encoding)
     Eterm obj;
     DECLARE_ESTACK(stack);
     Sint need = 0;
+    size_t len;
+    byte* name;
 
-    if (is_atom(ioterm)) {
-	Atom* ap;
+    if (erts_atom_name(ioterm, &len, &name)) {
 	int i;
-	ap = atom_tab(atom_val(ioterm));
 	switch (encoding) {
 	case ERL_FILENAME_LATIN1:
-	    need = ap->len;
+	    need = len;
 	    break;
 	case ERL_FILENAME_UTF8_MAC:
 	case ERL_FILENAME_UTF8:
-	    for (i = 0; i < ap->len; i++) {
-		need += (ap->name[i] >= 0x80) ? 2 : 1;
+	    for (i = 0; i < len; i++) {
+		need += (name[i] >= 0x80) ? 2 : 1;
 	    }
 	    break;
 	case ERL_FILENAME_WIN_WCHAR:
-	    need = 2*(ap->len);
+	    need = 2*(len);
 	    break;
 	default:
 	    need = -1;
@@ -2281,32 +2280,32 @@ void erts_native_filename_put(Eterm ioterm, int encoding, byte *p)
     Eterm *objp;
     Eterm obj;
     DECLARE_ESTACK(stack);
+    size_t len;
+    byte* name;
 
-    if (is_atom(ioterm)) {
-	Atom* ap;
+    if (erts_atom_name(ioterm, &len, &name)) {
 	int i;
-	ap = atom_tab(atom_val(ioterm));
 	switch (encoding) {
 	case ERL_FILENAME_LATIN1:
-	    for (i = 0; i < ap->len; i++) {
-		*p++ = ap->name[i];
+	    for (i = 0; i < len; i++) {
+		*p++ = name[i];
 	    }
 	    break;
 	case ERL_FILENAME_UTF8_MAC:
 	case ERL_FILENAME_UTF8:
-	    for (i = 0; i < ap->len; i++) {
-		if(ap->name[i] < 0x80) {
-		    *p++ = ap->name[i];
+	    for (i = 0; i < len; i++) {
+		if(name[i] < 0x80) {
+		    *p++ = name[i];
 		} else {
-		    *p++ = (((ap->name[i]) >> 6) | ((byte) 0xC0));
-		    *p++ = (((ap->name[i]) & 0x3F) | ((byte) 0x80));
+		    *p++ = (((name[i]) >> 6) | ((byte) 0xC0));
+		    *p++ = (((name[i]) & 0x3F) | ((byte) 0x80));
 		}
 	    }
 	    break;
 	case ERL_FILENAME_WIN_WCHAR:
-	    for (i = 0; i < ap->len; i++) {
+	    for (i = 0; i < len; i++) {
 		/* Little endian */
-		*p++ = ap->name[i];
+		*p++ = name[i];
 		*p++ = 0;
 	    }
 	    break;

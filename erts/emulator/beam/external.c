@@ -230,11 +230,8 @@ erts_finalize_atom_cache_map(ErtsAtomCacheMap *acmp)
 	min_sz = fix_sz+(2+4)*acmp->sz;
 	sz = fix_sz;
 	for (i = 0; i < acmp->sz; i++) {
-	    Eterm atom;
-	    int len;
-	    atom = acmp->cache[acmp->cix[i]].atom;
-	    ASSERT(is_atom(atom));
-	    len = atom_tab(atom_val(atom))->len;
+	    size_t len;
+	    erts_atom_name(acmp->cache[acmp->cix[i]].atom, &len, NULL);
 #if MAX_ATOM_LENGTH > 255
 	    if (!long_atoms && len > 255)
 		long_atoms = 1;
@@ -379,12 +376,13 @@ byte *erts_encode_ext_dist_header_finalize(byte *ext, ErtsAtomCache *cache)
 		flgs |= ((cix >> 8) & 7);
 	    }
 	    else {
-		Atom *a;
+		byte* name;
+		size_t len;
 		cache->out_arr[cix] = atom;
-		a = atom_tab(atom_val(atom));
-		sz = a->len;
+		erts_atom_name(atom, &len, &name);
+		sz = len;
 		ep -= sz;
-		sys_memcpy((void *) ep, (void *) a->name, sz);
+		sys_memcpy((void *) ep, (void *) name, sz);
 #if MAX_ATOM_LENGTH > 255
 		if (long_atoms) {
 		    ep -= 2;
@@ -1404,7 +1402,6 @@ static byte*
 enc_atom(ErtsAtomCacheMap *acmp, Eterm atom, byte *ep, Uint32 dflags)
 {
     int iix;
-    int i, j;
 
     ASSERT(is_atom(atom));
 
@@ -1429,8 +1426,9 @@ enc_atom(ErtsAtomCacheMap *acmp, Eterm atom, byte *ep, Uint32 dflags)
      */
     iix = get_iix_acache_map(acmp, atom);
     if (iix < 0) { 
-	i = atom_val(atom);
-	j = atom_tab(i)->len;
+	byte* name;
+	size_t j;
+	erts_atom_name(atom, &j, &name);
 	if ((MAX_ATOM_LENGTH <= 255 || j <= 255)
 	    && (dflags & DFLAG_SMALL_ATOM_TAGS)) {
 	    *ep++ = SMALL_ATOM_EXT;
@@ -1442,7 +1440,7 @@ enc_atom(ErtsAtomCacheMap *acmp, Eterm atom, byte *ep, Uint32 dflags)
 	    put_int16(j, ep);
 	    ep += 2;
 	}
-	sys_memcpy((char *) ep, (char*)atom_tab(i)->name, (int) j);
+	sys_memcpy((char *) ep, (char*)name, j);
 	ep += j;
 	return ep;
     }
@@ -2878,7 +2876,8 @@ encode_size_struct2(ErtsAtomCacheMap *acmp, Eterm obj, unsigned dflags)
 		}
 	    }
 	    else {
-		int alen = atom_tab(atom_val(obj))->len;
+		size_t alen;
+		erts_atom_name(obj, &alen, NULL);
 		if ((MAX_ATOM_LENGTH <= 255 || alen <= 255)
 		    && (dflags & DFLAG_SMALL_ATOM_TAGS)) {
 		    /* Make sure a SMALL_ATOM_EXT fits: SMALL_ATOM_EXT l t1 t2... */
@@ -3003,10 +3002,11 @@ encode_size_struct2(ErtsAtomCacheMap *acmp, Eterm obj, unsigned dflags)
 		    /*
 		     * Size when fun is mapped to a tuple.
 		     */
+		    size_t len;
+		    erts_atom_name(funp->fe->module, &len, NULL);
 		    result += 1 + 1; /* Tuple tag, arity */
 		    result += 1 + 1 + 2 + 3; /* 'fun' */
-		    result += 1 + 1 + 2 +
-			atom_tab(atom_val(funp->fe->module))->len; /* Module name */
+		    result += 1 + 1 + 2 + len; /* Module name */
 		    result += 2 * (1 + 4); /* Index + Uniq */
 		    result += 1 + (funp->num_free < 0x100 ? 1 : 4);
 		}

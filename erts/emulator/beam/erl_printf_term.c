@@ -454,13 +454,15 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount,
 	case EXPORT_DEF:
 	    {
 		Export* ep = *((Export **) (export_val(wobj) + 1));
-		Atom* module = atom_tab(atom_val(ep->code[0]));
-		Atom* name = atom_tab(atom_val(ep->code[1]));
+		size_t mod_len, name_len;
+		byte *mod_name, *name;
+		erts_atom_name(ep->code[0], &mod_len, &mod_name);
+		erts_atom_name(ep->code[1], &name_len, &name);
 
 		PRINT_STRING(res, fn, arg, "#Fun<");
-		PRINT_BUF(res, fn, arg, module->name, module->len);
+		PRINT_BUF(res, fn, arg, mod_name, mod_len);
 		PRINT_CHAR(res, fn, arg, '.');
-		PRINT_BUF(res, fn, arg, name->name, name->len);
+		PRINT_BUF(res, fn, arg, name, name_len);
 		PRINT_CHAR(res, fn, arg, '.');
 		PRINT_SLONG(res, fn, arg, 'd', 0, 1,
 			    (signed long) ep->code[2]);
@@ -470,10 +472,12 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount,
 	case FUN_DEF:
 	    {
 		ErlFunThing *funp = (ErlFunThing *) fun_val(wobj);
-		Atom *ap = atom_tab(atom_val(funp->fe->module));
+		size_t len;
+		byte* name;
+		erts_atom_name(funp->fe->module, &len, &name);
 
 		PRINT_STRING(res, fn, arg, "#Fun<");
-		PRINT_BUF(res, fn, arg, ap->name, ap->len);
+		PRINT_BUF(res, fn, arg, name, len);
 		PRINT_CHAR(res, fn, arg, '.');
 		PRINT_SLONG(res, fn, arg, 'd', 0, 1,
 			    (signed long) funp->fe->old_index);

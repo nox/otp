@@ -53,6 +53,7 @@ typedef struct atom {
 extern IndexTable erts_atom_table;
 
 ERTS_GLB_INLINE Atom* atom_tab(Uint i);
+ERTS_GLB_INLINE int erts_atom_name(Eterm term, size_t *len, byte **name);
 ERTS_GLB_INLINE int erts_is_atom_bytes(byte *text, size_t len, Eterm term);
 ERTS_GLB_INLINE int erts_is_atom_str(char *str, Eterm term);
 
@@ -63,26 +64,38 @@ atom_tab(Uint i)
     return (Atom *) erts_index_lookup(&erts_atom_table, i);
 }
 
+ERTS_GLB_INLINE int erts_atom_name(Eterm term, size_t *len, byte **name)
+{
+    if (is_atom(term)) {
+        Atom *a = atom_tab(atom_val(term));
+        *len = a->len;
+        if (name) {
+            *name = a->name;
+        }
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
 ERTS_GLB_INLINE int erts_is_atom_bytes(byte *text, size_t len, Eterm term)
 {
-    Atom *a;
-    if (!is_atom(term))
-	return 0;
-    a = atom_tab(atom_val(term));
-    return (len == (size_t) a->len
-	    && sys_memcmp((void *) a->name, (void *) text, len) == 0);
+    size_t alen;
+    byte *aname;
+    if (!erts_atom_name(term, &alen, &aname)) {
+        return 0;
+    }
+    return (len == (size_t) alen
+	    && sys_memcmp((void *) aname, (void *) text, len) == 0);
 }
 
 ERTS_GLB_INLINE int erts_is_atom_str(char *str, Eterm term)
 {
-    Atom *a;
-    int i, len;
-    char *aname;
-    if (!is_atom(term))
-	return 0;
-    a = atom_tab(atom_val(term));
-    len = a->len;
-    aname = (char *) a->name;
+    size_t i, len;
+    byte *aname;
+    if (!erts_atom_name(term, &len, &aname)) {
+        return 0;
+    }
     for (i = 0; i < len; i++)
 	if (aname[i] != str[i] || str[i] == '\0')
 	    return 0;

@@ -784,18 +784,19 @@ build_capture(Eterm capture_spec[CAPSPEC_SIZE], const pcre *code)
 		if (term_to_int(val,&x)) {
 		    ri->v[ri->num_spec - 1] = x;
 		} else if (is_atom(val) || is_binary(val) || is_list(val)) {
-		    if (is_atom(val)) {
-			Atom *ap = atom_tab(atom_val(val));
-			if ((ap->len + 1) > tmpbsiz) {
+		    size_t len;
+		    byte* name;
+		    if (erts_atom_name(val, &len, &name)) {
+			if (len > tmpbsiz) {
 			    if (!tmpbsiz) {
-				tmpb = erts_alloc(ERTS_ALC_T_RE_TMP_BUF,(tmpbsiz = ap->len + 1));
+				tmpb = erts_alloc(ERTS_ALC_T_RE_TMP_BUF,(tmpbsiz = len + 1));
 			    } else {
 				tmpb = erts_realloc(ERTS_ALC_T_RE_TMP_BUF,tmpb,
-						    (tmpbsiz = ap->len + 1));
+						    (tmpbsiz = len + 1));
 			    }
 			}
-			memcpy(tmpb,ap->name,ap->len);
-			tmpb[ap->len] = '\0';
+			memcpy(tmpb,name,len);
+			tmpb[len] = '\0';
 		    } else {
 			ErlDrvSizeT slen;
 			if (erts_iolist_size(val, &slen)) {

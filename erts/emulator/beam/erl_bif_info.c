@@ -2005,11 +2005,12 @@ c_compiler_used(Eterm **hpp, Uint *szp)
 
 static int is_snif_term(Eterm module_atom) {
     int i;
-    Atom *a = atom_tab(atom_val(module_atom));
-    char *aname = (char *) a->name;
+    size_t len;
+    byte* aname;
 
-    /* if a->name has a '.' then the bif (snif) is bogus i.e a package */
-    for (i = 0; i < a->len; i++) {
+    erts_atom_name(module_atom, &len, &aname);
+    /* if module name has a '.' then the bif (snif) is bogus i.e a package */
+    for (i = 0; i < len; i++) {
 	if (aname[i] == '.')
 	    return 0;
     }

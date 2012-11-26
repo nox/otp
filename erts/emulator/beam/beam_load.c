@@ -1241,11 +1241,12 @@ load_atom_table(LoaderState* stp)
 	stp->module = stp->atom[1];
     } else if (stp->atom[1] != stp->module) {
 	char sbuf[256];
-	Atom* ap;
+	size_t len;
+	byte* name;
 
-	ap = atom_tab(atom_val(stp->atom[1]));
-	memcpy(sbuf, ap->name, ap->len);
-	sbuf[ap->len] = '\0';
+	erts_atom_name(stp->atom[1], &len, &name);
+	memcpy(sbuf, name, len);
+	sbuf[len] = '\0';
 	LoadError1(stp, "module name in object code is %s", sbuf);
     }
 
@@ -5330,17 +5331,19 @@ erts_build_mfa_item(FunctionInfo* fi, Eterm* hp, Eterm args, Eterm* mfa_p)
 
     if (fi->loc != LINE_INVALID_LOCATION) {
 	Eterm tuple;
+	size_t len;
+	byte* name;
 	int line = LOC_LINE(fi->loc);
 	int file = LOC_FILE(fi->loc);
 	Eterm file_term = NIL;
 
 	if (file == 0) {
-	    Atom* ap = atom_tab(atom_val(fi->current[0]));
+	    erts_atom_name(fi->current[0], &len, &name);
 	    file_term = buf_to_intlist(&hp, ".erl", 4, NIL);
-	    file_term = buf_to_intlist(&hp, (char*)ap->name, ap->len, file_term);
+	    file_term = buf_to_intlist(&hp, (char*)name, len, file_term);
 	} else {
-	    Atom* ap = atom_tab(atom_val((fi->fname_ptr)[file-1]));
-	    file_term = buf_to_intlist(&hp, (char*)ap->name, ap->len, NIL);
+	    erts_atom_name((fi->fname_ptr)[file-1], &len, &name);
+	    file_term = buf_to_intlist(&hp, (char*)name, len, NIL);
 	}
 
 	tuple = TUPLE2(hp, am_line, make_small(line));

@@ -228,12 +228,11 @@ static int is_node_name(char *ptr, int len)
 
 int is_node_name_atom(Eterm a)
 {
-    int i;
-    if(is_not_atom(a))
+    size_t len;
+    byte *name;
+    if (!erts_atom_name(a, &len, &name))
 	return 0;
-    i = atom_val(a);
-    ASSERT((i > 0) && (i < atom_table_size()) &&  (atom_tab(i) != NULL));
-    return is_node_name((char*)atom_tab(i)->name, atom_tab(i)->len);
+    return is_node_name((char*)name, len);
 }
 
 typedef struct {

@@ -1136,11 +1136,13 @@ BIF_RETTYPE hipe_bifs_make_fe_3(BIF_ALIST_3)
 
     fe = erts_get_fun_entry(mod, uniq, index);
     if (fe == NULL) {
-	int i = atom_val(mod);
+	size_t len;
+	byte* name;
 	char atom_buf[256];
 
+	erts_atom_name(mod, &len, &name);
 	atom_buf[0] = '\0';
-	strncat(atom_buf, (char*)atom_tab(i)->name, atom_tab(i)->len);
+	strncat(atom_buf, (char*)name, len);
 	printf("no fun entry for %s %ld:%ld\n", atom_buf, uniq, index);
 	BIF_ERROR(BIF_P, BADARG);
     }
