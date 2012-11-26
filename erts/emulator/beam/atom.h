@@ -98,7 +98,6 @@ ERTS_GLB_INLINE int erts_is_atom_str(char *str, Eterm term)
 #define ERTS_IS_ATOM_STR(LSTR, TERM) \
   (erts_is_atom_bytes((byte *) LSTR, sizeof(LSTR) - 1, (TERM)))
 #define ERTS_DECL_AM(S) Eterm AM_ ## S = am_atom_put(#S, sizeof(#S) - 1)
-#define ERTS_INIT_AM(S) AM_ ## S = am_atom_put(#S, sizeof(#S) - 1)
 
 int atom_table_size(void);	/* number of elements */
 int atom_table_sz(void);	/* table size in bytes, excluding stored objects */
