@@ -3004,8 +3004,7 @@ encode_size_struct2(ErtsAtomCacheMap *acmp, Eterm obj, unsigned dflags)
 		     * Size when fun is mapped to a tuple.
 		     */
 		    result += 1 + 1; /* Tuple tag, arity */
-		    result += 1 + 1 + 2 +
-			atom_tab(atom_val(am_fun))->len; /* 'fun' */
+		    result += 1 + 1 + 2 + 3; /* 'fun' */
 		    result += 1 + 1 + 2 +
 			atom_tab(atom_val(funp->fe->module))->len; /* Module name */
 		    result += 2 * (1 + 4); /* Index + Uniq */
