@@ -374,7 +374,12 @@ werror(#compile{options=Opts,warnings=Ws}) ->
 
 %% messages_per_file([{File,[Message]}]) -> [{File,[Message]}]
 messages_per_file(Ms) ->
-    T = lists:sort([{File,M} || {File,Messages} <- Ms, M <- Messages]),
+    T = lists:sort(fun ({F,{{_,_},_,_}=M1}, {F,{{_,_},_,_}=M2}) -> M1 =< M2;
+                       ({F,{{L1,_},_,_}}, {F,{L2,_,_}}) -> L1 < L2;
+                       ({F,{L1,_,_}}, {F,{{L2,_},_,_}}) -> L1 =< L2;
+                       (FM1, FM2) -> FM1 =< FM2
+                   end,
+                   [{File,M} || {File,Messages} <- Ms, M <- Messages]),
     PrioMs = [erl_scan, epp, erl_parse],
     {Prio0, Rest} =
         lists:mapfoldl(fun(M, A) ->
