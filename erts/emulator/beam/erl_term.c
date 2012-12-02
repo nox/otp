@@ -144,6 +144,7 @@ ET_DEFINE_CHECKED(Uint,bignum_header_arity,Eterm,_is_bignum_header);
 ET_DEFINE_CHECKED(Eterm*,big_val,Wterm,is_big);
 ET_DEFINE_CHECKED(Eterm*,float_val,Wterm,is_float);
 ET_DEFINE_CHECKED(Eterm*,tuple_val,Wterm,is_tuple);
+ET_DEFINE_CHECKED(LocalAtom*,local_atom_val,Wterm,is_local_atom);
 ET_DEFINE_CHECKED(struct erl_node_*,internal_pid_node,Eterm,is_internal_pid);
 ET_DEFINE_CHECKED(struct erl_node_*,internal_port_node,Eterm,is_internal_port);
 ET_DEFINE_CHECKED(Eterm*,internal_ref_val,Wterm,is_internal_ref);

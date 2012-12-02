@@ -670,7 +670,7 @@ extern int count_instructions;
 
 #define IsNumber(X, Fail) if (is_not_integer(X) && is_not_float(X)) { Fail; }
 
-#define IsAtom(Src, Fail) if (is_not_atom(Src)) { Fail; }
+#define IsAtom(Src, Fail) if (is_not_any_atom(Src)) { Fail; }
 
 #define IsIntegerAllocate(Src, Need, Alive, Fail)  \
     if (is_not_integer(Src)) { Fail; }             \

@@ -140,7 +140,7 @@ is_printable_string(Eterm list, Eterm* base)
 /* print a atom doing what quoting is necessary */
 static int print_atom_name(fmtfn_t fn, void* arg, Eterm atom, long *dcount)
 {
-    int n, i;
+    size_t n;
     int res;
     int need_quote;
     int pos;
@@ -149,19 +149,20 @@ static int print_atom_name(fmtfn_t fn, void* arg, Eterm atom, long *dcount)
     int c;
 
     res = 0;
-    i = atom_val(atom);
+    if (is_atom(atom)) {
+	int i = atom_val(atom);
 
-    if ((i < 0) || (i >= atom_table_size()) ||  (atom_tab(i) == NULL)) {
-	PRINT_STRING(res, fn, arg, "<bad atom index: ");
-	PRINT_SLONG(res, fn, arg, 'd', 0, 1, (signed long) i);
-	PRINT_CHAR(res, fn, arg, '>');
-	return res;
+	if ((i < 0) || (i >= atom_table_size()) ||  (atom_tab(i) == NULL)) {
+	    PRINT_STRING(res, fn, arg, "<bad atom index: ");
+	    PRINT_SLONG(res, fn, arg, 'd', 0, 1, (signed long) i);
+	    PRINT_CHAR(res, fn, arg, '>');
+	    return res;
+	}
     }
 
-    s = atom_tab(i)->name;
-    n = atom_tab(i)->len;
+    erts_atom_name(atom, &n, &s);
 
-    *dcount -= atom_tab(i)->len;
+    *dcount -= n;
 
     if (n == 0) {
 	PRINT_STRING(res, fn, arg, "''");

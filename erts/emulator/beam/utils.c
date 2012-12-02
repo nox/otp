@@ -1327,7 +1327,17 @@ make_hash2(Eterm term)
 		goto hash2_common;
 	    }
 	    break;
-		    
+	    case LOCAL_ATOM_SUBTAG:
+	    {
+		LocalAtom *atom = local_atom_val(term);
+		if (hash == 0) {
+		    /* Fast, but the poor hash value should be mixed. */
+		    hash = atom->hash;
+		} else {
+		    UINT32_HASH(atom->hash, HCONST_3);
+		}
+		goto hash2_common;
+	    }
 	    default:
 		erl_exit(1, "Invalid tag in make_hash2(0x%X)\n", term);
 	    }

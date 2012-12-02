@@ -2621,50 +2621,87 @@ BIF_RETTYPE atom_to_list_1(BIF_ALIST_1)
 
 /**********************************************************************/
 
-/* convert a list of ascii integers to an atom */
- 
-BIF_RETTYPE list_to_atom_1(BIF_ALIST_1)
+static Uint32 atom_hash(byte* p, size_t len)
 {
-    Eterm res;
-    char *buf = (char *) erts_alloc(ERTS_ALC_T_TMP, MAX_ATOM_LENGTH);
-    int i = intlist_to_buf(BIF_ARG_1, buf, MAX_ATOM_LENGTH);
+    Uint32 h = 0, g;
 
-    if (i < 0) {
-	erts_free(ERTS_ALC_T_TMP, (void *) buf);
-	i = list_length(BIF_ARG_1);
-	if (i > MAX_ATOM_LENGTH) {
-	    BIF_ERROR(BIF_P, SYSTEM_LIMIT);
+    while(len--) {
+	h = (h << 4) + *p++;
+	if ((g = h & 0xf0000000)) {
+	    h ^= (g >> 24);
+	    h ^= g;
 	}
-	BIF_ERROR(BIF_P, BADARG);
     }
-    res = am_atom_put(buf, i);
+    return h;
+}
+
+Eterm erts_make_local_atom_in_buffer(Eterm *buffer, byte *name, size_t len)
+{
+    LocalAtom* hp = (LocalAtom *) buffer;
+    Eterm atom = make_local_atom(hp);
+    hp->header = make_local_atom_header(len);
+    hp->equivrep = atom;
+    hp->hash = atom_hash(name, len);
+    hp->len = len;
+    memcpy(hp->name, name, len);
+    return atom;
+}
+
+Eterm erts_make_local_atom(Process *p, byte *name, size_t len)
+{
+    Eterm* hp;
+    ASSERT(len <= 255);
+    hp = HAlloc(p, local_atom_size(len));
+    return erts_make_local_atom_in_buffer(hp, name, len);
+}
+
+static BIF_RETTYPE
+list_to_atom(Process *p, Eterm list, int force, int must_exist)
+{
+	Eterm res;
+    int i;
+    char *buf = (char *) erts_alloc(ERTS_ALC_T_TMP, MAX_ATOM_LENGTH);
+
+    if ((i = intlist_to_buf(list, buf, MAX_ATOM_LENGTH)) < 0) {
+    error:
+	erts_free(ERTS_ALC_T_TMP, (void *) buf);
+	BIF_ERROR(p, BADARG);
+    } else {
+	if (force) {
+	    res = am_atom_put(buf, i);
+	} else {
+	    if (!erts_atom_get(buf, i, &res)) {
+		if (must_exist) {
+		    goto error;
+		}
+		res = erts_make_local_atom(p, (byte *) buf, i);
+	    }
+	}
+    }
     erts_free(ERTS_ALC_T_TMP, (void *) buf);
     BIF_RET(res);
 }
 
-/* conditionally convert a list of ascii integers to an atom */
- 
-BIF_RETTYPE list_to_existing_atom_1(BIF_ALIST_1)
-{
-    int i;
-    char *buf = (char *) erts_alloc(ERTS_ALC_T_TMP, MAX_ATOM_LENGTH);
+/* convert a list of ascii integers to a global atom */
 
-    if ((i = intlist_to_buf(BIF_ARG_1, buf, MAX_ATOM_LENGTH)) < 0) {
-    error:
-	erts_free(ERTS_ALC_T_TMP, (void *) buf);
-	BIF_ERROR(BIF_P, BADARG);
-    } else {
-	Eterm a;
-	
-	if (erts_atom_get(buf, i, &a)) {
-	    erts_free(ERTS_ALC_T_TMP, (void *) buf);
-	    BIF_RET(a);
-	} else {
-	    goto error;
-	}
-    }
+BIF_RETTYPE list_to_atom_1(BIF_ALIST_1)
+{
+    return list_to_atom(BIF_P, BIF_ARG_1, 1, 1);
 }
 
+/* conditionally convert a list of ascii integers to a global atom */
+
+BIF_RETTYPE list_to_existing_atom_1(BIF_ALIST_1)
+{
+    return list_to_atom(BIF_P, BIF_ARG_1, 0, 1);
+}
+
+/* convert a list of ascii integers to a local atom */
+
+BIF_RETTYPE list_to_local_atom_1(BIF_ALIST_1)
+{
+    return list_to_atom(BIF_P, BIF_ARG_1, 0, 0);
+}
 
 /**********************************************************************/
 

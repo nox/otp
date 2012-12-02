@@ -1843,7 +1843,7 @@ BIF_RETTYPE atom_to_binary_2(BIF_ALIST_2)
 }
 
 static BIF_RETTYPE
-binary_to_atom(Process* p, Eterm bin, Eterm enc, int must_exist)
+binary_to_atom(Process* p, Eterm bin, Eterm enc, int force, int must_exist)
 {
     byte* bytes;
     byte *temp_alloc = NULL;
@@ -1860,15 +1860,19 @@ binary_to_atom(Process* p, Eterm bin, Eterm enc, int must_exist)
 	    erts_free_aligned_binary_bytes(temp_alloc);
 	    BIF_ERROR(p, SYSTEM_LIMIT);
 	}
-	if (!must_exist) {
+	if (force) {
 	    a = am_atom_put((char *)bytes, bin_size);
 	    erts_free_aligned_binary_bytes(temp_alloc);
 	    BIF_RET(a);
-	} else if (erts_atom_get((char *)bytes, bin_size, &a)) {
+	} else {
+	    if (!erts_atom_get((char *)bytes, bin_size, &a)) {
+		if (must_exist) {
+		    goto badarg;
+		}
+		a = erts_make_local_atom(p, bytes, bin_size);
+	    }
 	    erts_free_aligned_binary_bytes(temp_alloc);
 	    BIF_RET(a);
-	} else {
-	    goto badarg;
 	}
     } else if (enc == am_utf8 || enc == am_unicode) {
 	char *buf;
@@ -1936,20 +1940,21 @@ binary_to_atom(Process* p, Eterm bin, Eterm enc, int must_exist)
 	    erts_free(ERTS_ALC_T_TMP, (void *) buf);
 	    goto system_limit;
 	}
-	if (!must_exist) {
+	if (force) {
 	    res = am_atom_put(buf, num_chars);
 	    erts_free(ERTS_ALC_T_TMP, (void *) buf);
 	    erts_free_aligned_binary_bytes(temp_alloc);
 	    BIF_RET(res);
 	} else {
-	    int exists = erts_atom_get(buf, num_chars, &res);
-	    erts_free(ERTS_ALC_T_TMP, (void *) buf);
-	    if (exists) {
-		erts_free_aligned_binary_bytes(temp_alloc);
-		BIF_RET(res);
-	    } else {
-		goto badarg;
+	    if (!erts_atom_get(buf, num_chars, &res)) {
+		if (must_exist) {
+		    goto free_badarg;
+		}
+		res = erts_make_local_atom(p, (byte *) buf, num_chars);
 	    }
+	    erts_free(ERTS_ALC_T_TMP, (void *) buf);
+	    erts_free_aligned_binary_bytes(temp_alloc);
+	    BIF_RET(res);
 	}
     } else {
     badarg:
@@ -1960,12 +1965,17 @@ binary_to_atom(Process* p, Eterm bin, Eterm enc, int must_exist)
 
 BIF_RETTYPE binary_to_atom_2(BIF_ALIST_2)
 {
-    return binary_to_atom(BIF_P, BIF_ARG_1, BIF_ARG_2, 0);
+    return binary_to_atom(BIF_P, BIF_ARG_1, BIF_ARG_2, 1, 1);
 }
 
 BIF_RETTYPE binary_to_existing_atom_2(BIF_ALIST_2)
 {
-    return binary_to_atom(BIF_P, BIF_ARG_1, BIF_ARG_2, 1);
+    return binary_to_atom(BIF_P, BIF_ARG_1, BIF_ARG_2, 0, 1);
+}
+
+BIF_RETTYPE binary_to_local_atom_2(BIF_ALIST_2)
+{
+    return binary_to_atom(BIF_P, BIF_ARG_1, BIF_ARG_2, 0, 0);
 }
 
 /**********************************************************

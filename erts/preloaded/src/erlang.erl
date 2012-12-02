@@ -73,7 +73,8 @@
 
 -export([adler32/1, adler32/2, adler32_combine/3, append_element/2]).
 -export([atom_to_binary/2, atom_to_list/1, binary_part/2, binary_part/3]).
--export([binary_to_atom/2, binary_to_existing_atom/2, binary_to_list/1]).
+-export([binary_to_atom/2, binary_to_existing_atom/2, binary_to_global_atom/2]).
+-export([binary_to_list/1]).
 -export([binary_to_list/3, binary_to_term/1, binary_to_term/2]).
 -export([bit_size/1, bitsize/1, bitstr_to_list/1, bitstring_to_list/1]).
 -export([bump_reductions/1, byte_size/1, call_on_load_function/1]).
@@ -93,6 +94,7 @@
 -export([integer_to_list/1, iolist_size/1, iolist_to_binary/1]).
 -export([is_alive/0, is_builtin/3, is_process_alive/1, length/1, link/1]).
 -export([list_to_atom/1, list_to_binary/1, list_to_bitstr/1]).
+-export([list_to_global_atom/1]).
 -export([list_to_bitstring/1, list_to_existing_atom/1, list_to_float/1]).
 -export([list_to_integer/1, list_to_pid/1, list_to_tuple/1, loaded/0]).
 -export([localtime/0, make_ref/0, match_spec_test/3, md5/1, md5_final/1]).

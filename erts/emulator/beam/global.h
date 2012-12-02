@@ -503,6 +503,8 @@ erts_bld_port_info(Eterm **hpp,
 void erts_bif_info_init(void);
 
 /* bif.c */
+Eterm erts_make_local_atom(Process *p, byte *name, size_t len);
+Eterm erts_make_local_atom_in_buffer(Eterm *buffer, byte *name, size_t len);
 Eterm erts_make_ref(Process *);
 Eterm erts_make_ref_in_buffer(Eterm buffer[REF_THING_SIZE]);
 void erts_make_ref_in_array(Uint32 ref[ERTS_MAX_REF_NUMBERS]);

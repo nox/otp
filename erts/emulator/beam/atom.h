@@ -73,6 +73,13 @@ ERTS_GLB_INLINE int erts_atom_name(Eterm term, size_t *len, byte **name)
             *name = a->name;
         }
         return 1;
+    } else if (is_local_atom(term)) {
+        LocalAtom *a = local_atom_val(term);
+        *len = a->len;
+        if (name) {
+            *name = (byte *) a->name;
+        }
+        return 1;
     } else {
         return 0;
     }

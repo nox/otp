@@ -112,7 +112,7 @@ struct erl_node_; /* Declared in erl_node_tables.h */
  *	1000	REFC_BINARY	|		|
  *	1001	HEAP_BINARY	| BINARIES	|
  *	1010	SUB_BINARY	|		|
- *      1011    Not used
+ *      1011    LOCAL_ATOM
  *      1100    EXTERNAL_PID  |                 |
  *      1101    EXTERNAL_PORT | EXTERNAL THINGS |
  *      1110    EXTERNAL_REF  |                 |
@@ -140,6 +140,7 @@ struct erl_node_; /* Declared in erl_node_tables.h */
 #define REFC_BINARY_SUBTAG	(0x8 << _TAG_PRIMARY_SIZE) /* BINARY */
 #define HEAP_BINARY_SUBTAG	(0x9 << _TAG_PRIMARY_SIZE) /* BINARY */
 #define SUB_BINARY_SUBTAG	(0xA << _TAG_PRIMARY_SIZE) /* BINARY */
+#define LOCAL_ATOM_SUBTAG	(0xB << _TAG_PRIMARY_SIZE) /* LOCAL_ATOM */
 #define EXTERNAL_PID_SUBTAG	(0xC << _TAG_PRIMARY_SIZE) /* EXTERNAL_PID */
 #define EXTERNAL_PORT_SUBTAG	(0xD << _TAG_PRIMARY_SIZE) /* EXTERNAL_PORT */
 #define EXTERNAL_REF_SUBTAG	(0xE << _TAG_PRIMARY_SIZE) /* EXTERNAL_REF */
@@ -155,6 +156,7 @@ struct erl_node_; /* Declared in erl_node_tables.h */
 #define _TAG_HEADER_REFC_BIN	(TAG_PRIMARY_HEADER|REFC_BINARY_SUBTAG)
 #define _TAG_HEADER_HEAP_BIN	(TAG_PRIMARY_HEADER|HEAP_BINARY_SUBTAG)
 #define _TAG_HEADER_SUB_BIN	(TAG_PRIMARY_HEADER|SUB_BINARY_SUBTAG)
+#define _TAG_HEADER_LOCAL_ATOM	(TAG_PRIMARY_HEADER|LOCAL_ATOM_SUBTAG)
 #define _TAG_HEADER_EXTERNAL_PID  (TAG_PRIMARY_HEADER|EXTERNAL_PID_SUBTAG)
 #define _TAG_HEADER_EXTERNAL_PORT (TAG_PRIMARY_HEADER|EXTERNAL_PORT_SUBTAG)
 #define _TAG_HEADER_EXTERNAL_REF  (TAG_PRIMARY_HEADER|EXTERNAL_REF_SUBTAG)
@@ -170,6 +172,7 @@ struct erl_node_; /* Declared in erl_node_tables.h */
 #define header_is_arityval(x)	(((x) & _HEADER_SUBTAG_MASK) == ARITYVAL_SUBTAG)
 #define header_is_thing(x)	(!header_is_transparent((x)))
 #define header_is_bin_matchstate(x)	((((x) & (_HEADER_SUBTAG_MASK)) == BIN_MATCHSTATE_SUBTAG))
+#define header_is_local_atom(x)	((((x) & (_HEADER_SUBTAG_MASK)) == LOCAL_ATOM_SUBTAG))
 
 #define _CPMASK		0x3
 
@@ -283,6 +286,9 @@ _ET_DECLARE_CHECKED(Sint,signed_val,Eterm)
 #define is_not_nil(x)	((x) != NIL)
 
 #define MAX_ATOM_INDEX (~(~((Uint) 0) << (sizeof(Uint)*8 - _TAG_IMMED2_SIZE)))
+
+#define is_any_atom(x) (is_atom((x)) || is_local_atom((x)))
+#define is_not_any_atom(x) (!is_any_atom((x)))
 
 /* atom access methods */
 #define make_atom(x)  ((Eterm)(((x) << _TAG_IMMED2_SIZE) + _TAG_IMMED2_ATOM))
@@ -549,6 +555,34 @@ _ET_DECLARE_CHECKED(Eterm*,tuple_val,Wterm)
    bits are numbered from 0 - (sizeof(Uint)*8-1) */
 
 #define _GETBITS(X,Pos,Size) (((X) >> (Pos)) & ~(~((Uint) 0) << (Size)))
+
+/* Local atom */
+
+typedef struct local_atom_ {
+    Eterm  header;
+    Eterm  equivrep;
+    Uint32 hash;
+    Uint32 len;
+    Eterm  name[1];
+} LocalAtom;
+
+#define LOCAL_ATOM_HEAD_SIZE (sizeof(LocalAtom) / sizeof(Eterm) - 1)
+#define local_atom_size(num_chars) \
+  (LOCAL_ATOM_HEAD_SIZE + ((num_chars) + sizeof(Eterm) - 1) / sizeof(Eterm))
+
+#define make_local_atom(x) make_boxed((x))
+
+#define _unchecked_local_atom_val(x) ((LocalAtom*) _unchecked_boxed_val((x)))
+_ET_DECLARE_CHECKED(LocalAtom*, local_atom_val, Wterm)
+#define local_atom_val(x) _ET_APPLY(local_atom_val, (x))
+
+#define make_local_atom_header(num_chars) \
+  _make_header(local_atom_size((num_chars)) - 1, _TAG_HEADER_LOCAL_ATOM)
+#define _is_local_atom_header(x) \
+  (((x) & _TAG_HEADER_MASK) == _TAG_HEADER_LOCAL_ATOM)
+#define is_local_atom(x) \
+  (is_boxed((x)) && _is_local_atom_header(*boxed_val((x))))
+#define is_not_local_atom(x) (!is_local_atom((x)))
 
 /*
  * Creation in node specific data (pids, ports, refs)
@@ -1126,6 +1160,7 @@ extern unsigned tag_val_def(Wterm);
 #define make_tuple_rel make_boxed_rel
 #define make_external_rel make_boxed_rel
 #define make_internal_ref_rel make_boxed_rel
+#define make_local_atom_rel make_boxed_rel
 
 #define binary_val_rel(RTERM, BASE) binary_val(rterm2wterm(RTERM, BASE))
 #define list_val_rel(RTERM, BASE) list_val(rterm2wterm(RTERM, BASE))
@@ -1136,6 +1171,7 @@ extern unsigned tag_val_def(Wterm);
 #define big_val_rel(RTERM,BASE)	big_val(rterm2wterm(RTERM,BASE))
 #define float_val_rel(RTERM,BASE) float_val(rterm2wterm(RTERM,BASE))
 #define internal_ref_val_rel(RTERM,BASE) internal_ref_val(rterm2wterm(RTERM,BASE))
+#define local_atom_val_rel(RTERM,BASE) local_atom_val(rterm2wterm(RTERM,BASE))
 
 #define external_thing_ptr_rel(RTERM, BASE) external_thing_ptr(rterm2wterm(RTERM, BASE))
 #define external_data_words_rel(RTERM,BASE) external_data_words(rterm2wterm(RTERM,BASE))
@@ -1161,6 +1197,7 @@ extern unsigned tag_val_def(Wterm);
 #define is_external_rel(RTERM,BASE) is_external(rterm2wterm(RTERM,BASE))
 #define is_external_port_rel(RTERM,BASE) is_external_port(rterm2wterm(RTERM,BASE))
 #define is_external_ref_rel(RTERM,BASE) is_external_ref(rterm2wterm(RTERM,BASE))
+#define is_local_atom_rel(RTERM,BASE) is_local_atom(rterm2wterm(RTERM,BASE))
 
 #define external_node_rel(RTERM,BASE) external_node(rterm2wterm(RTERM,BASE))
 
