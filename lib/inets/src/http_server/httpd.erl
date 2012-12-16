@@ -48,8 +48,7 @@
 %%%========================================================================
 
 parse_query(String) ->
-  {ok, SplitString} = inets_regexp:split(String,"[&;]"),
-  foreach(SplitString).
+  foreach(string:tokens(String, "&;")).
 
 reload_config(Config = [Value| _], Mode) when is_tuple(Value) ->
     do_reload_config(Config, Mode);
@@ -267,12 +266,11 @@ unblock(Addr, Port) when is_integer(Port) ->
 foreach([]) ->
   [];
 foreach([KeyValue|Rest]) ->
-  {ok, Plus2Space, _} = inets_regexp:gsub(KeyValue,"[\+]"," "),
-  case inets_regexp:split(Plus2Space,"=") of
-    {ok,[Key|Value]} ->
-      [{http_uri:decode(Key),
-	http_uri:decode(lists:flatten(Value))}|foreach(Rest)];
-    {ok,_} ->
+  Plus2Space = lists:map(fun ($+) -> $\s; (C) -> C end, KeyValue),
+  case lists:splitwith(fun (C) -> C =/= $= end, Plus2Space) of
+    {Key,[$=|Value]} ->
+      [{http_uri:decode(Key),http_uri:decode(Value)}|foreach(Rest)];
+    {_,_} ->
       foreach(Rest)
   end.
 
