@@ -133,7 +133,7 @@ which_scheme_defaults(Opts) ->
     end.
 
 parse_scheme(AbsURI, Opts) ->
-    case split_uri(AbsURI, ":", {error, no_scheme}, 1, 1) of
+    case split_uri(AbsURI, $:, {error, no_scheme}, 1, 1) of
 	{error, no_scheme} ->
 	    {error, no_scheme};
 	{SchemeStr, Rest} ->
@@ -149,47 +149,48 @@ parse_scheme(AbsURI, Opts) ->
 
 parse_uri_rest(Scheme, DefaultPort, "//" ++ URIPart, Opts) ->
     {Authority, PathQuery} =
-	case split_uri(URIPart, "/", URIPart, 1, 0) of
+	case split_uri(URIPart, $/, URIPart, 1, 0) of
 	    Split = {_, _} ->
 		Split;
 	    URIPart ->
-		case split_uri(URIPart, "\\?", URIPart, 1, 0) of
+		case split_uri(URIPart, $?, URIPart, 1, 0) of
 		    Split = {_, _} ->
 			Split;
 		    URIPart ->
 			{URIPart,""}
 		end
 	end,
-    {UserInfo, HostPort} = split_uri(Authority, "@", {"", Authority}, 1, 1),
+    {UserInfo, HostPort} = split_uri(Authority, $@, {"", Authority}, 1, 1),
     {Host, Port}         = parse_host_port(Scheme, DefaultPort, HostPort, Opts),
     {Path, Query}        = parse_path_query(PathQuery),
     {ok, {UserInfo, Host, Port, Path, Query}}.
 
 
 parse_path_query(PathQuery) ->
-    {Path, Query} =  split_uri(PathQuery, "\\?", {PathQuery, ""}, 1, 0),
+    {Path, Query} =  split_uri(PathQuery, $?, {PathQuery, ""}, 1, 0),
     {path(Path), Query}.
 
 %% In this version of the function, we no longer need 
 %% the Scheme argument, but just in case...
 parse_host_port(_Scheme, DefaultPort, "[" ++ HostPort, Opts) -> %ipv6
-    {Host, ColonPort} = split_uri(HostPort, "\\]", {HostPort, ""}, 1, 1),
+    {Host, ColonPort} = split_uri(HostPort, $], {HostPort, ""}, 1, 1),
     Host2 = maybe_ipv6_host_with_brackets(Host, Opts),
-    {_, Port} = split_uri(ColonPort, ":", {"", DefaultPort}, 0, 1),
+    {_, Port} = split_uri(ColonPort, $:, {"", DefaultPort}, 0, 1),
     {Host2, int_port(Port)};
 
 parse_host_port(_Scheme, DefaultPort, HostPort, _Opts) ->
-    {Host, Port} = split_uri(HostPort, ":", {HostPort, DefaultPort}, 1, 1),
+    {Host, Port} = split_uri(HostPort, $:, {HostPort, DefaultPort}, 1, 1),
     {Host, int_port(Port)}.
 
 split_uri(UriPart, SplitChar, NoMatchResult, SkipLeft, SkipRight) ->
-    case inets_regexp:first_match(UriPart, SplitChar) of
-	{match, Match, _} ->
-	    {string:substr(UriPart, 1, Match - SkipLeft),
-	     string:substr(UriPart, Match + SkipRight, length(UriPart))};
-	nomatch ->
-	    NoMatchResult
-    end.
+    split_uri(UriPart, SplitChar, NoMatchResult, SkipLeft, SkipRight, []).
+
+split_uri([SplitChar|_]=Uri, SplitChar, _NoMatchResult, L, R, Acc) ->
+    {lists:reverse(lists:nthtail(L-1, Acc)),lists:nthtail(R, Uri)};
+split_uri([C|Rest], SplitChar, NoMatchResult, L, R, Acc) ->
+    split_uri(Rest, SplitChar, NoMatchResult, L, R, [C|Acc]);
+split_uri([], _SplitChar, NoMatchResult, _L, _R, _Acc) ->
+    NoMatchResult.
 
 maybe_ipv6_host_with_brackets(Host, Opts) ->
     case lists:keysearch(ipv6_host_with_brackets, 1, Opts) of
