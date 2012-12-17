@@ -101,10 +101,10 @@ is_file(_Type,_Access,FileInfo,_File) ->
 %% Description: make_integer/1 returns an integer representation of String. 
 %%-------------------------------------------------------------------------
 make_integer(String) ->
-    case inets_regexp:match(clean(String),"[0-9]+") of
-	{match, _, _} ->
-	    {ok, list_to_integer(clean(String))};
-	nomatch ->
+    case catch list_to_integer(clean(String)) of
+	I when is_integer(I), I >= 0 ->
+	    {ok, I};
+	_ ->
 	    {error, nomatch}
     end.
 
@@ -117,9 +117,7 @@ make_integer(String) ->
 %% from String.
 %%-------------------------------------------------------------------------
 clean(String) ->
-    {ok,CleanedString,_} = 
-	inets_regexp:gsub(String, "^[ \t\n\r\f]*|[ \t\n\r\f]*\$",""),
-    CleanedString.
+    re:replace(String, "^[ \t\n\r\f]*|[ \t\n\r\f]*$", "", [{return,list}]).
 
 
 %%-------------------------------------------------------------------------
@@ -131,9 +129,8 @@ clean(String) ->
 %% spaces and custom characters from String. 
 %%-------------------------------------------------------------------------
 custom_clean(String,MoreBefore,MoreAfter) ->
-    {ok,CleanedString,_} = inets_regexp:gsub(String,"^[ \t\n\r\f"++MoreBefore++
-				       "]*|[ \t\n\r\f"++MoreAfter++"]*\$",""),
-    CleanedString.
+    re:replace(String,"^[ \t\n\r\f"++MoreBefore++
+		      "]*|[ \t\n\r\f"++MoreAfter++"]*$","",[{return,list}]).
 
 
 %%-------------------------------------------------------------------------
@@ -343,7 +340,7 @@ load("KeepAliveTimeout " ++ Timeout, []) ->
     end;
 
 load("Modules " ++ Modules, []) ->
-    {ok, ModuleList} = inets_regexp:split(Modules," "),
+    ModuleList = string:tokens(Modules," "),
     {ok, [], {modules,[list_to_atom(X) || X <- ModuleList]}};
 
 load("ServerAdmin " ++ ServerAdmin, []) ->
@@ -953,7 +950,7 @@ bootstrap([]) ->
 bootstrap([Line|Config]) ->
     case Line of
 	"Modules " ++ Modules ->
-	    {ok, ModuleList} = inets_regexp:split(Modules," "),
+	    ModuleList = string:tokens(Modules," "),
 	    TheMods = [list_to_atom(X) || X <- ModuleList],
 	    case verify_modules(TheMods) of
 		ok ->
@@ -1078,7 +1075,7 @@ read_config_file(Stream, SoFar) ->
 	    %% Ignore commented lines for efficiency later ..
 	    read_config_file(Stream, SoFar);
 	Line ->
-	    {ok, NewLine, _}=inets_regexp:sub(clean(Line),"[\t\r\f ]"," "),
+	    NewLine=re:replace(clean(Line),"[\t\r\f ]"," ",[{return,list}]),
 	    case NewLine of
 		[] ->
 		    %% Also ignore empty lines ..
@@ -1105,7 +1102,7 @@ parse_mime_types(Stream, MimeTypesList, "") ->
 parse_mime_types(Stream, MimeTypesList, [$#|_]) ->
     parse_mime_types(Stream, MimeTypesList);
 parse_mime_types(Stream, MimeTypesList, Line) ->
-    case inets_regexp:split(Line, " ") of
+    case string:tokens(Line, " ") of
 	{ok, [NewMimeType|Suffixes]} ->
 	    parse_mime_types(Stream,
 			     lists:append(suffixes(NewMimeType,Suffixes),
