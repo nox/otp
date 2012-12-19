@@ -430,14 +430,14 @@ flatlength([],L) ->
 %% split_path
 
 split_path(Path) ->
-    case inets_regexp:match(Path,"[\?].*\$") of
-	%% A QUERY_STRING exists!
-	{match,Start,Length} ->
-	    {http_uri:decode(string:substr(Path,1,Start-1)),
-	     string:substr(Path,Start,Length)};
+    case string:chr(Path,$?) of
 	%% A possible PATH_INFO exists!
-	nomatch ->
-	    split_path(Path,[])
+	0 ->
+	    split_path(Path,[]);
+	%% A QUERY_STRING exists!
+	Start ->
+	    {http_uri:decode(string:substr(Path,1,Start-1)),
+	     lists:nthtail(Path,Start+1)}
     end.
 
 split_path([],SoFar) ->
@@ -533,23 +533,11 @@ remove_ws(Rest) ->
 %% split
 
 split(String,RegExp,Limit) ->
-    case inets_regexp:parse(RegExp) of
+    case re:compile(RegExp) of
 	{error,Reason} ->
 	    {error,Reason};
 	{ok,_} ->
-	    {ok,do_split(String,RegExp,Limit)}
-    end.
-
-do_split(String, _RegExp, 1) ->
-    [String];
-
-do_split(String,RegExp,Limit) ->
-    case inets_regexp:first_match(String,RegExp) of 
-	{match,Start,Length} ->
-	    [string:substr(String,1,Start-1)|
-	     do_split(lists:nthtail(Start+Length-1,String),RegExp,Limit-1)];
-	nomatch ->
-	    [String]
+	    {ok,re:split(String,RegExp,[{parts,Limit},{return,list},trim])}
     end.
 
 %% make_name/2, make_name/3
