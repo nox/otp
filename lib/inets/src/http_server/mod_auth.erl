@@ -296,14 +296,12 @@ secret_path(_Path, [], to_be_found) ->
 secret_path(_Path, [], Directory) ->
     {yes, Directory};
 secret_path(Path, [[NewDirectory] | Rest], Directory) ->
-    case inets_regexp:match(Path, NewDirectory) of
-	{match, _, _} when Directory =:= to_be_found ->
+    case lists:prefix(NewDirectory, Path) of
+	true when Directory =:= to_be_found ->
 	    secret_path(Path, Rest, NewDirectory);
-	{match, _, Length} when Length > length(Directory)->
+	true when length(NewDirectory) > length(Directory)->
 	    secret_path(Path, Rest,NewDirectory);
-	{match, _, _Length} ->
-	    secret_path(Path, Rest, Directory);
-	nomatch ->
+	_ ->
 	    secret_path(Path, Rest, Directory)
     end.
 
@@ -329,8 +327,8 @@ validate_addr(_RemoteAddr, none) ->           % When called from 'deny'
 validate_addr(_RemoteAddr, []) ->
     false;
 validate_addr(RemoteAddr, [HostRegExp | Rest]) ->
-    case inets_regexp:match(RemoteAddr, HostRegExp) of
-	{match,_,_} ->
+    case re:run(RemoteAddr, HostRegExp) of
+	{match,_} ->
 	    true;
 	nomatch ->
 	    validate_addr(RemoteAddr,Rest)
@@ -416,38 +414,38 @@ load("AuthDBType " ++ Type,
     end;
 
 load("require " ++ Require,[{directory, {Directory, DirData}}|Rest]) ->
-    case inets_regexp:split(Require," ") of
-	{ok,["user"|Users]} ->
+    case string:tokens(Require," ") of
+	["user"|Users] ->
 	    {ok,[{directory, {Directory,
 		  [{require_user,Users}|DirData]}} | Rest]};
-	{ok,["group"|Groups]} ->
+	["group"|Groups] ->
 	    {ok,[{directory, {Directory,
 		  [{require_group,Groups}|DirData]}} | Rest]};
-	{ok,_} ->
+	_ ->
 	    {error,?NICE(httpd_conf:clean(Require) ++" is an invalid require")}
     end;
 
 load("allow " ++ Allow,[{directory, {Directory, DirData}}|Rest]) ->
-    case inets_regexp:split(Allow," ") of
-	{ok,["from","all"]} ->
+    case string:tokens(Allow," ") of
+	["from","all"] ->
 	    {ok,[{directory, {Directory,
 		  [{allow_from,all}|DirData]}} | Rest]};
-	{ok,["from"|Hosts]} ->
+	["from"|Hosts] ->
 	    {ok,[{directory, {Directory,
 		  [{allow_from,Hosts}|DirData]}} | Rest]};
-	{ok,_} ->
+	_ ->
 	    {error,?NICE(httpd_conf:clean(Allow) ++" is an invalid allow")}
     end;
 
 load("deny " ++ Deny,[{directory, {Directory, DirData}}|Rest]) ->
-    case inets_regexp:split(Deny," ") of
-	{ok, ["from", "all"]} ->
+    case string:tokens(Deny," ") of
+	["from", "all"] ->
 	    {ok,[{{directory, Directory,
 		  [{deny_from, all}|DirData]}} | Rest]};
-	{ok, ["from"|Hosts]} ->
+	["from"|Hosts] ->
 	    {ok,[{{directory, Directory,
 		   [{deny_from, Hosts}|DirData]}} | Rest]};
-	{ok, _} ->
+	_ ->
 	    {error,?NICE(httpd_conf:clean(Deny) ++" is an invalid deny")}
     end;
 

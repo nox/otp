@@ -637,10 +637,8 @@ getHtAccessFileNames(Info)->
 %HtAccessFileNames=["accessfileName1",..."AccessFileName2"]
 %----------------------------------------------------------------------
 getData(Path,Info,HtAccessFileNames)->	    
-    case inets_regexp:split(Path,"/") of
-	{error,Error}->
-	    {error,Error};
-	{ok,SplittedPath}->
+    SplittedPath = string:tokens(Path,"/"),
+	{ok,}->ƒ
 	    getData2(HtAccessFileNames,SplittedPath,Info)
 	end.
 

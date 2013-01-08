@@ -95,24 +95,24 @@ do(ModData) ->
 %% Description: See httpd(3) ESWAPI CALLBACK FUNCTIONS
 %%-------------------------------------------------------------------------
 load("ErlScriptAlias " ++ ErlScriptAlias, []) ->
-    case inets_regexp:split(ErlScriptAlias," ") of
-	{ok, [ErlName | StrModules]} ->
+    case string:tokens(ErlScriptAlias," ") of
+	[ErlName | StrModules] ->
 	    Modules = lists:map(fun(Str) -> 
 					list_to_atom(httpd_conf:clean(Str)) 
 				end, StrModules),
 	    {ok, [], {erl_script_alias, {ErlName, Modules}}};
-	{ok, _} ->
+	_ ->
 	    {error, ?NICE(httpd_conf:clean(ErlScriptAlias) ++
 			 " is an invalid ErlScriptAlias")}
     end;
 load("EvalScriptAlias " ++ EvalScriptAlias, []) ->
-    case inets_regexp:split(EvalScriptAlias, " ") of
-	{ok, [EvalName | StrModules]} ->
+    case string:tokens(EvalScriptAlias, " ") of
+	[EvalName | StrModules] ->
 	    Modules = lists:map(fun(Str) -> 
 					list_to_atom(httpd_conf:clean(Str)) 
 				end, StrModules),
 	    {ok, [], {eval_script_alias, {EvalName, Modules}}};
-	{ok, _} ->
+	_ ->
 	    {error, ?NICE(httpd_conf:clean(EvalScriptAlias) ++
 			  " is an invalid EvalScriptAlias")}
     end;

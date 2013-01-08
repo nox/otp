@@ -97,9 +97,9 @@ getBrowser1(Info) ->
 
 getBrowser(AgentString) ->
     LAgentString = http_util:to_lower(AgentString),
-    case inets_regexp:first_match(LAgentString,"^[^ ]*") of
-	{match,Start,Length} ->
-	    Browser = lists:sublist(LAgentString,Start,Length),
+    case lists:splitwith(fun (C) -> C =/= $\s end, LAgentString) of
+	{Browser," " ++ _} ->
+	    Browser = lists:sublist(LAgentString,1,Length),
 	    case browserType(Browser) of
 		{mozilla,Vsn} ->
 		    {getMozilla(LAgentString,
@@ -108,7 +108,7 @@ getBrowser(AgentString) ->
 		AnyBrowser ->
 		      {AnyBrowser,operativeSystem(LAgentString)}
 	    end;
-	nomatch ->
+	_ ->
 	    browserType(LAgentString)
     end.
 

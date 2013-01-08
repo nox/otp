@@ -137,8 +137,8 @@ do(Info) ->
 %% Description: See httpd(3) ESWAPI CALLBACK FUNCTIONS
 %%-------------------------------------------------------------------------
 load("TransferDiskLogSize " ++ TransferDiskLogSize, []) ->
-    case inets_regexp:split(TransferDiskLogSize," ") of
-	{ok,[MaxBytes,MaxFiles]} ->
+    case string:tokens(TransferDiskLogSize," ") of
+	[MaxBytes,MaxFiles] ->
 	    case httpd_conf:make_integer(MaxBytes) of
 		{ok,MaxBytesInteger} ->
 		    case httpd_conf:make_integer(MaxFiles) of
@@ -159,8 +159,8 @@ load("TransferDiskLog " ++ TransferDiskLog,[]) ->
     {ok,[],{transfer_disk_log,httpd_conf:clean(TransferDiskLog)}};
  
 load("ErrorDiskLogSize " ++  ErrorDiskLogSize, []) ->
-    case inets_regexp:split(ErrorDiskLogSize," ") of
-	{ok,[MaxBytes,MaxFiles]} ->
+    case string:tokens(ErrorDiskLogSize," ") of
+	[MaxBytes,MaxFiles] ->
 	    case httpd_conf:make_integer(MaxBytes) of
 		{ok,MaxBytesInteger} ->
 		    case httpd_conf:make_integer(MaxFiles) of
@@ -180,8 +180,8 @@ load("ErrorDiskLog " ++ ErrorDiskLog, []) ->
     {ok, [], {error_disk_log, httpd_conf:clean(ErrorDiskLog)}};
 
 load("SecurityDiskLogSize " ++ SecurityDiskLogSize, []) ->
-    case inets_regexp:split(SecurityDiskLogSize, " ") of
-	{ok, [MaxBytes, MaxFiles]} ->
+    case string:tokens(SecurityDiskLogSize, " ") of
+	[MaxBytes, MaxFiles] ->
 	    case httpd_conf:make_integer(MaxBytes) of
 		{ok, MaxBytesInteger} ->
 		    case httpd_conf:make_integer(MaxFiles) of
