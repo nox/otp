@@ -1151,6 +1151,22 @@ otp_10302(Config) when is_list(Config) ->
      {cons,Line,{integer,Line,55296},{string,Line,"c"}}} =
         erl_parse:abstract("a"++[55296]++"c", Line),
 
+    Loc = {17,4},
+    {integer,Loc,1} = erl_parse:abstract(1, Loc),
+    Float = 3.14, {float,Loc,Float} = erl_parse:abstract(Float, Loc),
+    {nil,Loc} = erl_parse:abstract([], Loc),
+    {bin,Loc,
+     [{bin_element,Loc,{integer,Loc,1},default,default},
+      {bin_element,Loc,{integer,Loc,2},default,default}]} =
+        erl_parse:abstract(<<1,2>>, Loc),
+    {cons,Loc,{tuple,Loc,[{atom,Loc,a}]},{atom,Loc,b}} =
+        erl_parse:abstract([{a} | b], Loc),
+    {string,Loc,"str"} = erl_parse:abstract("str", Loc),
+    {cons,Loc,
+     {integer,Loc,$a},
+     {cons,Loc,{integer,Loc,55296},{string,Loc,"c"}}} =
+        erl_parse:abstract("a"++[55296]++"c", Loc),
+
     Opts1 = [{line,17}],
     {integer,Line,1} = erl_parse:abstract(1, Opts1),
     Float = 3.14, {float,Line,Float} = erl_parse:abstract(Float, Opts1),
@@ -1182,6 +1198,22 @@ otp_10302(Config) when is_list(Config) ->
              erl_parse:abstract("a"++[1024]++"c", Opts2)
      end || Opts2 <- [[{encoding,unicode},{line,Line}],
                       [{encoding,utf8},{line,Line}]]],
+
+    Opts3 = [{line,17},{column,4}],
+    {integer,Loc,1} = erl_parse:abstract(1, Opts3),
+    Float = 3.14, {float,Loc,Float} = erl_parse:abstract(Float, Opts3),
+    {nil,Loc} = erl_parse:abstract([], Opts3),
+    {bin,Loc,
+     [{bin_element,Loc,{integer,Loc,1},default,default},
+      {bin_element,Loc,{integer,Loc,2},default,default}]} =
+        erl_parse:abstract(<<1,2>>, Opts3),
+    {cons,Loc,{tuple,Loc,[{atom,Loc,a}]},{atom,Loc,b}} =
+        erl_parse:abstract([{a} | b], Opts3),
+    {string,Loc,"str"} = erl_parse:abstract("str", Opts3),
+    {cons,Loc,
+     {integer,Loc,$a},
+     {cons,Loc,{integer,Loc,55296},{string,Loc,"c"}}} =
+        erl_parse:abstract("a"++[55296]++"c", Opts3),
 
     {cons,0,
      {integer,0,97},
