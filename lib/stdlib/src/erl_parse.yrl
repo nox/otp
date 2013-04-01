@@ -39,7 +39,7 @@ fun_expr fun_clause fun_clauses atom_or_var integer_or_var
 try_expr try_catch try_clause try_clauses
 function_call argument_list
 exprs guard
-atomic strings
+atomic dotted_atom strings
 prefix_op mult_op add_op list_op comp_op
 rule rule_clauses rule_clause rule_body
 binary bin_elements bin_element bit_expr
@@ -65,7 +65,7 @@ char integer float atom string var
 'spec' 'callback' % helper
 dot.
 
-Expect 2.
+Expect 3.
 
 Rootsymbol form.
 
@@ -73,17 +73,18 @@ form -> attribute dot : '$1'.
 form -> function dot : '$1'.
 form -> rule dot : '$1'.
 
-attribute -> '-' atom attr_val               : build_attribute('$2', '$3').
-attribute -> '-' atom typed_attr_val         : build_typed_attribute('$2','$3').
-attribute -> '-' atom '(' typed_attr_val ')' : build_typed_attribute('$2','$4').
+attribute -> '-' dotted_atom attr_val        : build_attribute('$2', '$3').
+attribute -> '-' dotted_atom typed_attr_val  : build_typed_attribute('$2','$3').
+attribute -> '-' dotted_atom '(' typed_attr_val ')' :
+	build_typed_attribute('$2','$4').
 attribute -> '-' 'spec' type_spec            : build_type_spec('$2', '$3').
 attribute -> '-' 'callback' type_spec        : build_type_spec('$2', '$3').
 
 type_spec -> spec_fun type_sigs : {'$1', '$2'}.
 type_spec -> '(' spec_fun type_sigs ')' : {'$2', '$3'}.
 
-spec_fun ->                           atom : '$1'.
-spec_fun ->                  atom ':' atom : {'$1', '$3'}.
+spec_fun ->                    dotted_atom : '$1'.
+spec_fun ->    dotted_atom ':' dotted_atom : {'$1', '$3'}.
 %% The following two are retained only for backwards compatibility;
 %% they are not part of the EEP syntax and should be removed.
 spec_fun ->          atom '/' integer '::' : {'$1', '$3'}.
@@ -111,8 +112,8 @@ type_sig -> fun_type 'when' type_guards   : {type, ?line('$1'), bounded_fun,
 type_guards -> type_guard                 : ['$1'].
 type_guards -> type_guard ',' type_guards : ['$1'|'$3'].
 
-type_guard -> atom '(' top_types ')'      : {type, ?line('$1'), constraint,
-                                             ['$1', '$3']}.
+type_guard -> dotted_atom '(' top_types ')' :
+	{type, ?line('$1'), constraint, ['$1', '$3']}.
 type_guard -> var '::' top_type           : build_def('$1', '$3').
 
 top_types -> top_type                     : ['$1'].
@@ -142,14 +143,14 @@ type_500 -> type                          : '$1'.
 
 type -> '(' top_type ')'                  : {paren_type, ?line('$2'), ['$2']}.
 type -> var                               : '$1'.
-type -> atom                              : '$1'.
-type -> atom '(' ')'                      : build_gen_type('$1').
-type -> atom '(' top_types ')'            : {type, ?line('$1'),
+type -> dotted_atom                       : '$1'.
+type -> dotted_atom '(' ')'               : build_gen_type('$1').
+type -> dotted_atom '(' top_types ')'     : {type, ?line('$1'),
                                              normalise('$1'), '$3'}.
-type -> atom ':' atom '(' ')'             : {remote_type, ?line('$1'),
-                                             ['$1', '$3', []]}.
-type -> atom ':' atom '(' top_types ')'   : {remote_type, ?line('$1'),
-                                             ['$1', '$3', '$5']}.
+type -> dotted_atom ':' dotted_atom '(' ')' :
+	{remote_type, ?line('$1'), ['$1', '$3', []]}.
+type -> dotted_atom ':' dotted_atom '(' top_types ')' :
+	{remote_type, ?line('$1'), ['$1', '$3', '$5']}.
 type -> '[' ']'                           : {type, ?line('$1'), nil, []}.
 type -> '[' top_type ']'                  : {type, ?line('$1'), list, ['$2']}.
 type -> '[' top_type ',' '...' ']'        : {type, ?line('$1'),
@@ -204,7 +205,7 @@ function -> function_clauses : build_function('$1').
 function_clauses -> function_clause : ['$1'].
 function_clauses -> function_clause ';' function_clauses : ['$1'|'$3'].
 
-function_clause -> atom clause_args clause_guard clause_body :
+function_clause -> dotted_atom clause_args clause_guard clause_body :
 	{clause,?line('$1'),element(3, '$1'),'$2','$3','$4'}.
 
 
@@ -303,8 +304,8 @@ opt_bit_type_list -> '$empty' : default.
 bit_type_list -> bit_type '-' bit_type_list : ['$1' | '$3'].
 bit_type_list -> bit_type : ['$1'].
 
-bit_type -> atom             : element(3,'$1').
-bit_type -> atom ':' integer : { element(3,'$1'), element(3,'$3') }.
+bit_type -> dotted_atom             : element(3,'$1').
+bit_type -> dotted_atom ':' integer : { element(3,'$1'), element(3,'$3') }.
 
 bit_size_expr -> expr_max : '$1'.
 
@@ -386,14 +387,14 @@ receive_expr -> 'receive' cr_clauses 'after' expr clause_body 'end' :
 	{'receive',?line('$1'),'$2','$4','$5'}.
 
 
-fun_expr -> 'fun' atom '/' integer :
+fun_expr -> 'fun' dotted_atom '/' integer :
 	{'fun',?line('$1'),{function,element(3, '$2'),element(3, '$4')}}.
 fun_expr -> 'fun' atom_or_var ':' atom_or_var '/' integer_or_var :
 	{'fun',?line('$1'),{function,'$2','$4','$6'}}.
 fun_expr -> 'fun' fun_clauses 'end' :
 	build_fun(?line('$1'), '$2').
 
-atom_or_var -> atom : '$1'.
+atom_or_var -> dotted_atom : '$1'.
 atom_or_var -> var : '$1'.
 
 integer_or_var -> integer : '$1'.
@@ -424,7 +425,7 @@ try_clauses -> try_clause ';' try_clauses : ['$1' | '$3'].
 try_clause -> expr clause_guard clause_body :
 	L = ?line('$1'),
 	{clause,L,[{tuple,L,[{atom,L,throw},'$1',{var,L,'_'}]}],'$2','$3'}.
-try_clause -> atom ':' expr clause_guard clause_body :
+try_clause -> dotted_atom ':' expr clause_guard clause_body :
 	L = ?line('$1'),
 	{clause,L,[{tuple,L,['$1','$3',{var,L,'_'}]}],'$4','$5'}.
 try_clause -> var ':' expr clause_guard clause_body :
@@ -445,8 +446,13 @@ guard -> exprs ';' guard : ['$1'|'$3'].
 atomic -> char : '$1'.
 atomic -> integer : '$1'.
 atomic -> float : '$1'.
-atomic -> atom : '$1'.
+atomic -> dotted_atom : '$1'.
 atomic -> strings : '$1'.
+
+dotted_atom -> atom : '$1'.
+dotted_atom -> atom '.' dotted_atom :
+	{atom,?line('$1'),
+	 list_to_atom(lists:concat([element(3, '$1'), '.', element(3, '$3')]))}.
 
 strings -> string : '$1'.
 strings -> string strings :
@@ -490,7 +496,7 @@ rule -> rule_clauses : build_rule('$1').
 rule_clauses -> rule_clause : ['$1'].
 rule_clauses -> rule_clause ';' rule_clauses : ['$1'|'$3'].
 
-rule_clause -> atom clause_args clause_guard rule_body :
+rule_clause -> dotted_atom clause_args clause_guard rule_body :
 	{clause,?line('$1'),element(3, '$1'),'$2','$3','$4'}.
 
 rule_body -> ':-' lc_exprs: '$2'.
