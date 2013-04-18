@@ -580,7 +580,7 @@ scan1("=/="++Cs, St, Line, Col, Toks) ->
 scan1("=/"=Cs, _St, Line, Col, Toks) ->
     {more,{Cs,Col,Toks,Line,[],fun scan/6}};
 scan1("=<"++Cs, St, Line, Col, Toks) ->
-    tok2(Cs, St, Line, Col, Toks, "=<", '=<', 2);
+    scan_lts(Cs, St, Line, Col, Toks, {{"=<",'=<',2},{"=",'=',1},1});
 scan1("=="++Cs, St, Line, Col, Toks) ->
     tok2(Cs, St, Line, Col, Toks, "==", '==', 2);
 scan1("="=Cs, _St, Line, Col, Toks) ->
@@ -651,6 +651,26 @@ scan1([]=Cs, _St, Line, Col, Toks) ->
     {more,{Cs,Col,Toks,Line,[],fun scan/6}};
 scan1(eof=Cs, _St, Line, Col, Toks) ->
     {ok,Toks,Cs,Line,Col}.
+
+scan_lts([], _St, Line, Col, Toks, Acc={_,_,_}) ->
+    {more,{[],Col,Toks,Line,Acc,fun scan_lts/6}};
+scan_lts("<"++Cs, St, Line, Col, Toks, {OddTokInfo,EvenTokInfo,LtCount}) ->
+    scan_lts(Cs, St, Line, Col, Toks, {OddTokInfo,EvenTokInfo,LtCount+1});
+scan_lts(Cs, St, Line, Col, Toks, {{Wcs,P,N},_,1}) ->
+    tok2(Cs, St, Line, Col, Toks, Wcs, P, N);
+scan_lts(Cs, St, Line, Col, Toks,
+        {{Wcs,P,N},_,LtCount}) when LtCount rem 2 =:= 1 ->
+    Attrs = attributes(Line, Col, St, Wcs),
+    scan_lts2(Cs, St, Line, incr_column(Col, N), [{P,Attrs}|Toks], LtCount-1);
+scan_lts(Cs, St, Line, Col, Toks, {_,{Wcs,P,N},LtCount}) ->
+    Attrs = attributes(Line, Col, St, Wcs),
+    scan_lts2(Cs, St, Line, incr_column(Col, N), [{P,Attrs}|Toks], LtCount).
+
+scan_lts2(Cs, St, Line, Col, Toks, 0) ->
+    scan1(Cs, St, Line, Col, Toks);
+scan_lts2(Cs, St, Line, Col, Toks0, LtCount) ->
+    Toks = [{'<<',attributes(Line, Col, St, "<<")}|Toks0],
+    scan_lts2(Cs, St, Line, incr_column(Col, 2), Toks, LtCount-2).
 
 scan_atom(Cs0, St, Line, Col, Toks, Ncs0) ->
     case scan_name(Cs0, Ncs0) of

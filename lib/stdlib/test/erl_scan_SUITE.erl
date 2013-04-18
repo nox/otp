@@ -233,8 +233,9 @@ punctuations() ->
          Ts = [{W,1}],
          ?line test_string(S, Ts)
      end || S <- L],
-    Three = ["/=:=", "<=:=", "==:=", ">=:="], % three tokens...
-    No = Three ++ L,
+    Three = ["/=:=", "<=:=", "==:=", ">=:=", "=<<-", "=<<="], % three tokens...
+    EqualBin = ["=<<"],
+    No = Three ++ EqualBin ++ L,
     SL0 = [{S1++S2,{-length(S1),S1,S2}} ||
               S1 <- L,
               S2 <- L,
@@ -242,13 +243,26 @@ punctuations() ->
     SL = family_list(SL0),
     %% Two tokens. When there are several answers, the one with
     %% the longest first token is chosen:
-    %% [the special case "=<<" is among the tested ones]
     [begin
          W1 = list_to_atom(S1),
          W2 = list_to_atom(S2),
          Ts = [{W1,1},{W2,1}],
          ?line test_string(S, Ts)
      end || {S,[{_,S1,S2}|_]}  <- SL],
+
+    %% Special case of "=" followed by one or more "<"
+    test_string("=<<", [{'=',1},{'<<',1}]),
+    test_string("=<<-", [{'=',1},{'<<',1},{'-',1}]),
+    test_string("=<<=", [{'=',1},{'<<',1},{'=',1}]),
+    test_string("=<<<", [{'=<',1},{'<<',1}]),
+    test_string("=<<<-", [{'=<',1},{'<<',1},{'-',1}]),
+    test_string("=<<<=", [{'=<',1},{'<<',1},{'=',1}]),
+    test_string("=<<<<", [{'=',1},{'<<',1},{'<<',1}]),
+    {more,C0} = erl_scan:tokens([], "=<", 1),
+    {done,{ok,[{'=<',1},{dot,1}],1},eof} = erl_scan:tokens(C0, eof, 1),
+    {done,{ok,[{'=',1},{'<<',1},{dot,1}],1},""} = erl_scan:tokens(C0, "<. ", 1),
+    {done,{ok,[{'=',1},{'<<',1},{'<<',1},{dot,1}],1},""} =
+        erl_scan:tokens(C0, "<<<. ", 1),
 
     PTs1 = [{'!',1},{'(',1},{')',1},{',',1},{';',1},{'=',1},{'[',1},
             {']',1},{'{',1},{'|',1},{'}',1}],
