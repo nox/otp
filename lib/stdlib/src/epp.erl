@@ -614,7 +614,6 @@ wait_request(St) ->
 	    epp_reply(From, dict:to_list(St#epp.macs)),
 	    wait_request(St);
 	{epp_request,From,close} ->
-	    close_file(St),
 	    epp_reply(From, ok),
 	    exit(normal);
 	{'EXIT',_,R} ->
@@ -623,11 +622,6 @@ wait_request(St) ->
 	    io:fwrite("Epp: unknown '~w'\n", [Other]),
 	    wait_request(St)
     end.
-
-close_file(#epp{pre_opened = true}) ->
-    ok;
-close_file(#epp{pre_opened = false, file = File}) ->
-    ok = file:close(File).
 
 wait_req_scan(St) ->
     From = wait_request(St),
@@ -706,7 +700,6 @@ leave_file(From, St) ->
 	[] ->
 	    case St#epp.sstk of
 		[OldSt|Sts] ->
-		    close_file(St),
                     #epp{location=OldLoc, delta=Delta, name=OldName,
                          name2=OldName2} = OldSt,
                     CurrLoc = add_line(OldLoc, Delta),
