@@ -112,11 +112,14 @@ include_local(Config) when is_list(Config) ->
     %% includes bar.hrl (also in include/) without requiring
     %% any additional include path, and overriding any file
     %% of the same name that the path points to
-    ?line {ok, List} = epp:parse_file(File, [DataDir], []),
+    {ok, Epp} = epp:open(File, [DataDir], []),
+    List = epp:parse_file(Epp),
     ?line {value, {attribute,_,a,{true,true}}} =
 	lists:keysearch(a,3,List),
     [{File,1},{FooHrl,1},{BarHrl,1},{FooHrl,5},{File,5}] =
         [ FileLine || {attribute,_,file,FileLine} <- List ],
+    [BarHrl,FooHrl,File] = lists:sort(epp:opened_files(Epp)),
+    ok = epp:close(Epp),
     ok.
 
 %%% Here is a little reimplementation of epp:parse_file, which times out

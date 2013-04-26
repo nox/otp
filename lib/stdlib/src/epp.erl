@@ -21,7 +21,7 @@
 %% An Erlang code preprocessor.
 
 -export([open/1, open/2,open/3,open/5,close/1,format_error/1]).
--export([scan_erl_form/1,parse_erl_form/1,macro_defs/1]).
+-export([scan_erl_form/1,parse_erl_form/1,macro_defs/1,opened_files/1]).
 -export([parse_file/1, parse_file/2, parse_file/3]).
 -export([default_encoding/0, encoding_to_string/1,
          read_encoding_from_binary/1, read_encoding_from_binary/2,
@@ -61,7 +61,8 @@
               uses = dict:new()                 %Macro use structure
                   :: dict:dict(name(), [{argspec(), [used()]}]),
               default_encoding = ?DEFAULT_ENCODING :: source_encoding(),
-	      pre_opened = false :: boolean()
+              pre_opened = false :: boolean(),
+              opened_files = dict:new() :: dict() %Opened files
 	     }).
 
 %%% Note on representation: as tokens, both {var, Location, Name} and
@@ -171,6 +172,9 @@ parse_erl_form(Epp) ->
 
 macro_defs(Epp) ->
     epp_request(Epp, macro_defs).
+
+opened_files(Epp) ->
+    epp_request(Epp, opened_files).
 
 %% format_error(ErrorDescriptor) -> String
 %%  Return a string describing the error.
@@ -545,7 +549,8 @@ init_server(Pid, Name, Options, St0) ->
                     proplists:get_value(includes, Options, [])],
             St = St0#epp{delta=0, name=Name, name2=Name,
 			 path=Path, macs=Ms1,
-			 default_encoding=DefEncoding},
+                         default_encoding=DefEncoding,
+                         opened_files=dict:store(Name, File, dict:new())},
             From = wait_request(St),
             enter_file_reply(From, Name, AtLocation, AtLocation),
             wait_req_scan(St);
@@ -613,6 +618,9 @@ wait_request(St) ->
 	{epp_request,From,macro_defs} ->
 	    epp_reply(From, dict:to_list(St#epp.macs)),
 	    wait_request(St);
+	{epp_request,From,opened_files} ->
+	    epp_reply(From, dict:fetch_keys(St#epp.opened_files)),
+	    wait_request(St);
 	{epp_request,From,close} ->
 	    epp_reply(From, ok),
 	    exit(normal);
@@ -641,20 +649,20 @@ enter_file(_NewName, Inc, From, St)
   when length(St#epp.sstk) >= 8 ->
     epp_reply(From, {error,{abs_loc(Inc),epp,{depth,"include"}}}),
     wait_req_scan(St);
-enter_file(NewName, Inc, From, St) ->
-    case file:path_open(St#epp.path, NewName, [read]) of
-	{ok,NewF,Pname} ->
+enter_file(NewName, Inc, From, St0) ->
+    case state_path_open(NewName, St0) of
+	{ok,NewF,Pname,St} ->
             Loc = start_loc(St#epp.location),
 	    wait_req_scan(enter_file2(NewF, Pname, From, St, Loc));
 	{error,_E} ->
 	    epp_reply(From, {error,{abs_loc(Inc),epp,{include,file,NewName}}}),
-	    wait_req_scan(St)
+	    wait_req_scan(St0)
     end.
 
 %% enter_file2(File, FullName, From, EppState, AtLocation) -> EppState.
 %%  Set epp to use this file and "enter" it.
 
-enter_file2(NewF, Pname, From, St0, AtLocation) ->
+enter_file2(NewF, Pname, From, St0=#epp{opened_files=Files}, AtLocation) ->
     Loc = start_loc(AtLocation),
     enter_file_reply(From, Pname, Loc, AtLocation),
     Ms = dict:store({atom,'FILE'}, {none,[{string,Loc,Pname}]}, St0#epp.macs),
@@ -669,7 +677,7 @@ enter_file2(NewF, Pname, From, St0, AtLocation) ->
     _ = set_encoding(NewF, DefEncoding),
     #epp{file=NewF,location=Loc,name=Pname,name2=Pname,delta=0,
          sstk=[St0|St0#epp.sstk],path=Path,macs=Ms,
-         default_encoding=DefEncoding}.
+         default_encoding=DefEncoding,opened_files=Files}.
 
 enter_file_reply(From, Name, Location, AtLocation) ->
     Attr = loc_attr(AtLocation),
@@ -690,7 +698,7 @@ file_name([]) ->
 file_name(N) when is_atom(N) ->
     atom_to_list(N).
 
-leave_file(From, St) ->
+leave_file(From, St=#epp{opened_files=Files}) ->
     case St#epp.istk of
 	[I|Cis] ->
 	    epp_reply(From,
@@ -700,13 +708,15 @@ leave_file(From, St) ->
 	[] ->
 	    case St#epp.sstk of
 		[OldSt|Sts] ->
-                    #epp{location=OldLoc, delta=Delta, name=OldName,
-                         name2=OldName2} = OldSt,
+                    #epp{file=File, offset=Offset, location=OldLoc, delta=Delta,
+                         name=OldName, name2=OldName2} = OldSt,
+                    _ = file:position(File, Offset),
                     CurrLoc = add_line(OldLoc, Delta),
 		    Ms = dict:store({atom,'FILE'},
 				    {none,[{string,CurrLoc,OldName2}]},
 				    St#epp.macs),
-                    NextSt = OldSt#epp{sstk=Sts,macs=Ms,uses=St#epp.uses},
+                    NextSt = OldSt#epp{sstk=Sts,macs=Ms,uses=St#epp.uses,
+                                       opened_files=Files},
 		    enter_file_reply(From, OldName, CurrLoc, CurrLoc),
                     case OldName2 =:= OldName of
                         true ->
@@ -726,18 +736,18 @@ leave_file(From, St) ->
 %% scan_toks(From, EppState)
 %% scan_toks(Tokens, From, EppState)
 
-scan_toks(From, St) ->
-    case io:scan_erl_form(St#epp.file, '', St#epp.location) of
-	{ok,Toks,Cl} ->
-	    scan_toks(Toks, From, St#epp{location=Cl});
-	{error,E,Cl} ->
+scan_toks(From, St0) ->
+    case state_scan_erl_form(St0) of
+	{ok,Toks,St} ->
+	    scan_toks(Toks, From, St);
+	{error,E,St} ->
 	    epp_reply(From, {error,E}),
-	    wait_req_scan(St#epp{location=Cl});
-	{eof,Cl} ->
-	    leave_file(From, St#epp{location=Cl});
+	    wait_req_scan(St);
+	{eof,St} ->
+	    leave_file(From, St);
 	{error,_E} ->
-            epp_reply(From, {error,{St#epp.location,epp,cannot_parse}}),
-	    leave_file(wait_request(St), St)	%This serious, just exit!
+            epp_reply(From, {error,{St0#epp.location,epp,cannot_parse}}),
+	    leave_file(wait_request(St0), St0)	%This serious, just exit!
     end.
 
 scan_toks([{'-',_Lh},{atom,_Ld,define}=Define|Toks], From, St) ->
@@ -951,30 +961,30 @@ scan_include_lib([{'(',_Llp},{string,_Lf,_NewName0},{')',_Lrp},{dot,_Ld}],
     epp_reply(From, {error,{abs_loc(Inc),epp,{depth,"include_lib"}}}),
     wait_req_scan(St);
 scan_include_lib([{'(',_Llp},{string,_Lf,NewName0},{')',_Lrp},{dot,_Ld}],
-                 Inc, From, St) ->
+                 Inc, From, St0) ->
     NewName = expand_var(NewName0),
-    Loc = start_loc(St#epp.location),
-    case file:path_open(St#epp.path, NewName, [read]) of
-	{ok,NewF,Pname} ->
+    Loc = start_loc(St0#epp.location),
+    case state_path_open(NewName, St0) of
+	{ok,NewF,Pname,St} ->
 	    wait_req_scan(enter_file2(NewF, Pname, From, St, Loc));
 	{error,_E1} ->
 	    case catch find_lib_dir(NewName) of
 		{LibDir, Rest} when is_list(LibDir) ->
 		    LibName = fname_join([LibDir | Rest]),
-		    case file:open(LibName, [read]) of
-			{ok,NewF} ->
+		    case state_open(LibName, St0) of
+			{ok,NewF,St} ->
 			    wait_req_scan(enter_file2(NewF, LibName, From,
                                                       St, Loc));
 			{error,_E2} ->
 			    epp_reply(From,
 				      {error,{abs_loc(Inc),epp,
                                               {include,lib,NewName}}}),
-			    wait_req_scan(St)
+			    wait_req_scan(St0)
 		    end;
 		_Error ->
 		    epp_reply(From, {error,{abs_loc(Inc),epp,
                                             {include,lib,NewName}}}),
-		    wait_req_scan(St)
+		    wait_req_scan(St0)
 	    end
     end;
 scan_include_lib(_Toks, Inc, From, St) ->
@@ -1100,27 +1110,27 @@ new_location(Ln, {Le,_}, {Lf,_}) ->
 %%  Skip over forms until current conditional has been exited. Handle
 %%  nested conditionals and repeated 'else's.
 
-skip_toks(From, St, [I|Sis]) ->
-    case io:scan_erl_form(St#epp.file, '', St#epp.location) of
-	{ok,[{'-',_Lh},{atom,_Li,ifdef}|_Toks],Cl} ->
-	    skip_toks(From, St#epp{location=Cl}, [ifdef,I|Sis]);
-	{ok,[{'-',_Lh},{atom,_Li,ifndef}|_Toks],Cl} ->
-	    skip_toks(From, St#epp{location=Cl}, [ifndef,I|Sis]);
-	{ok,[{'-',_Lh},{'if',_Li}|_Toks],Cl} ->
-	    skip_toks(From, St#epp{location=Cl}, ['if',I|Sis]);
-	{ok,[{'-',_Lh},{atom,_Le,'else'}=Else|_Toks],Cl}->
-	    skip_else(Else, From, St#epp{location=Cl}, [I|Sis]);
-	{ok,[{'-',_Lh},{atom,_Le,endif}|_Toks],Cl} ->
-	    skip_toks(From, St#epp{location=Cl}, Sis);
-	{ok,_Toks,Cl} ->
-	    skip_toks(From, St#epp{location=Cl}, [I|Sis]);
-	{error,_E,Cl} ->
-	    skip_toks(From, St#epp{location=Cl}, [I|Sis]);
-	{eof,Cl} ->
-	    leave_file(From, St#epp{location=Cl,istk=[I|Sis]});
+skip_toks(From, St0, [I|Sis]) ->
+    case state_scan_erl_form(St0) of
+	{ok,[{'-',_Lh},{atom,_Li,ifdef}|_Toks],St} ->
+	    skip_toks(From, St, [ifdef,I|Sis]);
+	{ok,[{'-',_Lh},{atom,_Li,ifndef}|_Toks],St} ->
+	    skip_toks(From, St, [ifndef,I|Sis]);
+	{ok,[{'-',_Lh},{'if',_Li}|_Toks],St} ->
+	    skip_toks(From, St, ['if',I|Sis]);
+	{ok,[{'-',_Lh},{atom,_Le,'else'}=Else|_Toks],St}->
+	    skip_else(Else, From, St, [I|Sis]);
+	{ok,[{'-',_Lh},{atom,_Le,endif}|_Toks],St} ->
+	    skip_toks(From, St, Sis);
+	{ok,_Toks,St} ->
+	    skip_toks(From, St, [I|Sis]);
+	{error,_E,St} ->
+	    skip_toks(From, St, [I|Sis]);
+	{eof,St} ->
+	    leave_file(From, St#epp{istk=[I|Sis]});
 	{error,_E} ->
-            epp_reply(From, {error,{St#epp.location,epp,cannot_parse}}),
-	    leave_file(wait_request(St), St)	%This serious, just exit!
+            epp_reply(From, {error,{St0#epp.location,epp,cannot_parse}}),
+	    leave_file(wait_request(St0), St0)	%This serious, just exit!
     end;
 skip_toks(From, St, []) ->
     scan_toks(From, St).
@@ -1467,6 +1477,60 @@ get_line(Line) when is_integer(Line) ->
     Line;
 get_line({Line,_Column}) ->
     Line.
+
+file_join(".", Name) ->
+    Name;
+file_join(Path, Name) ->
+    filename:join(Path, Name).
+
+path_find(Name, [P|Ps]) ->
+    Pname = file_join(P, Name),
+    case file:read_file_info(Pname) of
+	{ok,_} -> {ok,Pname};
+	{error,enoent} -> path_find(Name, Ps);
+	Err={error,_} -> Err
+    end;
+path_find(_, []) ->
+    {error,enoent}.
+
+state_open(Name, St=#epp{opened_files=Files0}) ->
+    case dict:find(Name, Files0) of
+	{ok,File} ->
+	    _ = file:position(File, bof),
+	    {ok,File,St};
+	error ->
+	    case file:open(Name, [read]) of
+		{ok,File} ->
+		    Files = dict:store(Name, File, Files0),
+		    {ok,File,St#epp{opened_files=Files}};
+		Err={error,_} ->
+		    Err
+	    end
+    end.
+
+state_path_open(Name, St0=#epp{path=Path}) ->
+    case path_find(Name, Path) of
+	{ok,Pname} ->
+	    case state_open(Pname, St0) of
+		{ok,File,St} -> {ok,File,Pname,St};
+		Err={error,_} -> Err
+	    end;
+	Err={error,_} ->
+	    Err
+    end.
+
+state_scan_erl_form(St0=#epp{file=File,location=Loc0}) ->
+    Result = io:scan_erl_form(File, '', Loc0),
+    St1 = case file:position(File, cur) of
+		 {ok,Offset1} -> St0#epp{offset=Offset1};
+		 {error,_}    -> St0 %Something will fail later
+	  end,
+    case Result of
+	{ok,Toks,Loc} -> {ok,Toks,St1#epp{location=Loc}};
+	{error,E,Loc} -> {error,E,St1#epp{location=Loc}};
+	{eof,Loc}     -> {eof,St1#epp{location=Loc}};
+	Err={error,_} -> Err
+    end.
 
 %% epp has always output -file attributes when entering and leaving
 %% included files (-include, -include_lib). Starting with R11B the
