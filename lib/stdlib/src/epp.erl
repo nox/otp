@@ -22,6 +22,7 @@
 
 -export([open/1, open/2,open/3,open/5,close/1,format_error/1]).
 -export([scan_erl_form/1,parse_erl_form/1,macro_defs/1,opened_files/1]).
+-export([read_file_line/2]).
 -export([parse_file/1, parse_file/2, parse_file/3]).
 -export([default_encoding/0, encoding_to_string/1,
          read_encoding_from_binary/1, read_encoding_from_binary/2,
@@ -62,7 +63,8 @@
                   :: dict:dict(name(), [{argspec(), [used()]}]),
               default_encoding = ?DEFAULT_ENCODING :: source_encoding(),
               pre_opened = false :: boolean(),
-              opened_files = dict:new() :: dict() %Opened files
+              opened_files = dict:new() :: dict(), %Opened files
+              offsets_tab :: ets:tid()             %Lines to offsets
 	     }).
 
 %%% Note on representation: as tokens, both {var, Location, Name} and
@@ -175,6 +177,9 @@ macro_defs(Epp) ->
 
 opened_files(Epp) ->
     epp_request(Epp, opened_files).
+
+read_file_line(FileLine={_,_}, Epp) ->
+    epp_request(Epp,{read_file_line,FileLine}).
 
 %% format_error(ErrorDescriptor) -> String
 %%  Return a string describing the error.
@@ -550,7 +555,8 @@ init_server(Pid, Name, Options, St0) ->
             St = St0#epp{delta=0, name=Name, name2=Name,
 			 path=Path, macs=Ms1,
                          default_encoding=DefEncoding,
-                         opened_files=dict:store(Name, File, dict:new())},
+                         opened_files=dict:store(Name, File, dict:new()),
+                         offsets_tab=Offsets},
             From = wait_request(St),
             enter_file_reply(From, Name, AtLocation, AtLocation),
             wait_req_scan(St);
@@ -621,6 +627,9 @@ wait_request(St) ->
 	{epp_request,From,opened_files} ->
 	    epp_reply(From, dict:fetch_keys(St#epp.opened_files)),
 	    wait_request(St);
+	{epp_request,From,{read_file_line,FileLine}} ->
+	    epp_reply(From, state_read_file_line(FileLine, St)),
+	    wait_request(St);
 	{epp_request,From,close} ->
 	    epp_reply(From, ok),
 	    exit(normal);
@@ -662,7 +671,8 @@ enter_file(NewName, Inc, From, St0) ->
 %% enter_file2(File, FullName, From, EppState, AtLocation) -> EppState.
 %%  Set epp to use this file and "enter" it.
 
-enter_file2(NewF, Pname, From, St0=#epp{opened_files=Files}, AtLocation) ->
+enter_file2(NewF, Pname, From, St0=#epp{opened_files=Files,offsets_tab=Offsets},
+	    AtLocation) ->
     Loc = start_loc(AtLocation),
     enter_file_reply(From, Pname, Loc, AtLocation),
     Ms = dict:store({atom,'FILE'}, {none,[{string,Loc,Pname}]}, St0#epp.macs),
@@ -677,7 +687,8 @@ enter_file2(NewF, Pname, From, St0=#epp{opened_files=Files}, AtLocation) ->
     _ = set_encoding(NewF, DefEncoding),
     #epp{file=NewF,location=Loc,name=Pname,name2=Pname,delta=0,
          sstk=[St0|St0#epp.sstk],path=Path,macs=Ms,
-         default_encoding=DefEncoding,opened_files=Files}.
+         default_encoding=DefEncoding,opened_files=Files,
+         offsets_tab=Offsets}.
 
 enter_file_reply(From, Name, Location, AtLocation) ->
     Attr = loc_attr(AtLocation),
@@ -1519,18 +1530,76 @@ state_path_open(Name, St0=#epp{path=Path}) ->
 	    Err
     end.
 
-state_scan_erl_form(St0=#epp{file=File,location=Loc0}) ->
+state_scan_erl_form(St=#epp{file=File,offset=Offset0,location=Loc0}) ->
     Result = io:scan_erl_form(File, '', Loc0),
-    St1 = case file:position(File, cur) of
-		 {ok,Offset1} -> St0#epp{offset=Offset1};
-		 {error,_}    -> St0 %Something will fail later
-	  end,
+    Offset = case file:position(File, cur) of
+		 {ok,Offset1} -> Offset1;
+		 {error,_}    -> Offset0 %Something will fail later
+	     end,
     case Result of
-	{ok,Toks,Loc} -> {ok,Toks,St1#epp{location=Loc}};
-	{error,E,Loc} -> {error,E,St1#epp{location=Loc}};
-	{eof,Loc}     -> {eof,St1#epp{location=Loc}};
+	{ok,Toks,Loc} -> {ok,Toks,state_update_loc(Loc, Offset, St)};
+	{error,E,Loc} -> {error,E,state_update_loc(Loc, Offset, St)};
+	{eof,Loc}     -> {eof,state_update_loc(Loc, Offset, St)};
 	Err={error,_} -> Err
     end.
+
+state_read_file_line(FileLine={Name,_},
+		     St=#epp{file=File,offset=Offset,name=Name}) ->
+    Result = state_read_file_line(FileLine, St, File),
+    _ = file:position(File, Offset),
+    Result;
+state_read_file_line(FileLine={Name,_}, St=#epp{opened_files=Files}) ->
+    case dict:find(Name, Files) of
+	{ok,File} -> state_read_file_line(FileLine, St, File);
+	error     -> {error,enoent}
+    end.
+
+state_read_file_line({Name,{1,_}}, St, File) ->
+    state_read_file_line({Name,1}, St, File);
+state_read_file_line({_,1}, _St, File) ->
+    case file:position(File, bof) of
+	{ok,0}        -> file:read_line(File);
+	Err={error,_} -> Err
+    end;
+state_read_file_line({Name,{Line,_}}, St, File) ->
+    state_read_file_line({Name,Line}, St, File);
+state_read_file_line({Name,Line0}, St=#epp{offsets_tab=Offsets},
+		     File) ->
+    {Line2,Offset} = case ets:prev(Offsets, {Line0,2}) of
+			 FileLine1={Name,{Line1,_}} ->
+			     {Line1,ets:lookup_element(Offsets, FileLine1, 2)};
+			     _ -> {1,0}
+		     end,
+    case file:position(File, Offset) of
+	{ok,Offset} -> state_read_file_line(Name, St, File, Line0, Line2);
+	Err={error,_} -> Err
+    end.
+
+state_read_file_line(_Name, _St, File, Line, Line) ->
+    file:read_line(File);
+state_read_file_line(Name, St=#epp{offsets_tab=Offsets}, File, Line0, Line1) ->
+    case file:read_line(File) of
+	{ok,_} ->
+	    case file:position(File, cur) of
+		{ok,Offset} ->
+		    Line2 = Line1 + 1,
+		    _ = ets:insert_new(Offsets, {{Name,{Line2,1}},Offset}),
+		    state_read_file_line(Name, St, File, Line0, Line2);
+		Err={error,_} ->
+		    Err
+	    end;
+	Other ->
+	    Other
+    end.
+
+state_update_loc(Loc, Offset, St0=#epp{delta=Delta,name=Name,
+				       offsets_tab=Offsets}) ->
+    OffsetLoc = case Loc of
+		    {Line,Col} -> {Line + Delta,Col};
+		    Line -> {Line + Delta,undefined}
+		end,
+    _ = ets:insert(Offsets, {{Name,OffsetLoc},Offset}),
+    St0#epp{offset=Offset,location=Loc}.
 
 %% epp has always output -file attributes when entering and leaving
 %% included files (-include, -include_lib). Starting with R11B the
