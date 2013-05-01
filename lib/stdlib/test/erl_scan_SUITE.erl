@@ -233,9 +233,10 @@ punctuations() ->
          Ts = [{W,1}],
          ?line test_string(S, Ts)
      end || S <- L],
-    Three = ["/=:=", "<=:=", "==:=", ">=:=", "=<<-", "=<<="], % three tokens...
-    EqualBin = ["=<<"],
-    No = Three ++ EqualBin ++ L,
+    Three = ["/=:=", "<=:=", "==:=", ">=:=", "=<<-", "=<<=",
+             "<<<-", "<<<="], % three tokens...
+    BinSpecialCases = ["<<<", "=<<"],
+    No = Three ++ BinSpecialCases ++ L,
     SL0 = [{S1++S2,{-length(S1),S1,S2}} ||
               S1 <- L,
               S2 <- L,
@@ -263,6 +264,20 @@ punctuations() ->
     {done,{ok,[{'=',1},{'<<',1},{dot,1}],1},""} = erl_scan:tokens(C0, "<. ", 1),
     {done,{ok,[{'=',1},{'<<',1},{'<<',1},{dot,1}],1},""} =
         erl_scan:tokens(C0, "<<<. ", 1),
+
+    %% Special case of "<" followed by one or more "<"
+    test_string("<<<", [{'<',1},{'<<',1}]),
+    test_string("<<<-", [{'<',1},{'<<',1},{'-',1}]),
+    test_string("<<<=", [{'<',1},{'<<',1},{'=',1}]),
+    test_string("<<<<", [{'<<',1},{'<<',1}]),
+    test_string("<<<<-", [{'<<',1},{'<<',1},{'-',1}]),
+    test_string("<<<<=", [{'<<',1},{'<<',1},{'=',1}]),
+    test_string("<<<<<", [{'<',1},{'<<',1},{'<<',1}]),
+    {more,C1} = erl_scan:tokens([], "<<", 1),
+    {done,{ok,[{'<<',1}],1},eof} = erl_scan:tokens(C1, eof, 1),
+    {done,{ok,[{'<',1},{'<<',1},{dot,1}],1},""} = erl_scan:tokens(C1, "<. ", 1),
+    {done,{ok,[{'<',1},{'<<',1},{'<<',1},{dot,1}],1},""} =
+        erl_scan:tokens(C1, "<<<. ", 1),
 
     PTs1 = [{'!',1},{'(',1},{')',1},{',',1},{';',1},{'=',1},{'[',1},
             {']',1},{'{',1},{'|',1},{'}',1}],
