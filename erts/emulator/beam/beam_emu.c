@@ -5239,9 +5239,14 @@ next_catch(Process* c_p, Eterm *reg) {
 static void
 terminate_proc(Process* c_p, Eterm Value)
 {
+    Eterm ExitValue = Value;
+    Eterm StackTrace = THE_NON_VALUE;
     /* Add a stacktrace if this is an error. */
     if (GET_EXC_CLASS(c_p->freason) == EXTAG_ERROR) {
-        Value = add_stacktrace(c_p, Value, c_p->ftrace);
+	Eterm* hp;
+	StackTrace = build_stacktrace(c_p, c_p->ftrace);
+	hp = HAlloc(c_p, 3);
+	ExitValue = TUPLE2(hp, ExitValue, StackTrace);
     }
     /* EXF_LOG is a primary exception flag */
     if (c_p->freason & EXF_LOG) {
@@ -5250,6 +5255,53 @@ terminate_proc(Process* c_p, Eterm Value)
 	if (erts_is_alive)
 	    erts_dsprintf(dsbufp, "on node %T ", erts_this_node->sysname);
 	erts_dsprintf(dsbufp,"with exit value: %0.*T\n", display_items, Value);
+	if (GET_EXC_CLASS(c_p->freason) == EXTAG_ERROR) {
+	    Uint i = 1;
+	    Eterm l = StackTrace;
+	    for (; is_not_nil(l); l = CDR(list_val(l))) {
+		unsigned arity;
+		Eterm* trace = tuple_val(CAR(list_val(l)));
+		erts_dsprintf(dsbufp, "#%u\t%T:%T", i++, trace[1], trace[2]);
+		if (is_integer(trace[3])) {
+		    erts_dsprintf(dsbufp, "/%T", trace[3]);
+		    arity = unsigned_val(trace[3]);
+		} else if (is_nil(trace[3])) {
+		    erts_dsprintf(dsbufp, "/0");
+		    arity = 0;
+		} else {
+		    Eterm args = CDR(list_val(trace[3]));
+		    erts_dsprintf(dsbufp, "(%0.*T",
+				  display_items, CAR(list_val(trace[3])));
+		    arity = 0;
+		    for (; is_not_nil(args); args = CDR(list_val(args))) {
+			erts_dsprintf(dsbufp, ", %0.*T",
+				      display_items, CAR(list_val(args)));
+			arity++;
+		    }
+		    erts_dsprintf(dsbufp, ")");
+		}
+		if (is_not_nil(trace[4])) {
+		    Eterm attrs = trace[4];
+		    Eterm* attr = tuple_val(CAR(list_val(attrs)));
+		    if (attr[1] == am_file) {
+			erts_dsprintf(dsbufp, " [%T", attr[2]);
+			attrs = CDR(list_val(attrs));
+			if (is_not_nil(attrs)) {
+			    attr = tuple_val(CAR(list_val(attrs)));
+			    if (attr[1] == am_line)
+				erts_dsprintf(dsbufp, ":%T", attr[2]);
+			}
+			erts_dsprintf(dsbufp, "]");
+		    }
+		} else {
+		    Export* e =
+			erts_active_export_entry(trace[1], trace[2], arity);
+		    if (e != NULL && e->code[3] == (BeamInstr) em_apply_bif)
+			erts_dsprintf(dsbufp, " <BIF>");
+		}
+		erts_dsprintf(dsbufp, "\n");
+	    }
+	}
 	erts_send_error_to_logger(c_p->group_leader, dsbufp);
     }
     /*
@@ -5257,7 +5309,7 @@ terminate_proc(Process* c_p, Eterm Value)
      * Must zero c_p->arity to indicate that there are no live registers.
      */
     c_p->arity = 0;
-    erts_do_exit_process(c_p, Value);
+    erts_do_exit_process(c_p, ExitValue);
 }
 
 /*
