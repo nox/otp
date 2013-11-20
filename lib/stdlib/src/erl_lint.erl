@@ -2105,20 +2105,18 @@ expr({call,Line,F,As}, Vt, St0) ->
     St = warn_invalid_call(Line,F,St0),
     expr_list([F|As], Vt, St);                  %They see the same variables
 expr({'try',Line,Es,Scs,Ccs,As}, Vt, St0) ->
-    %% Currently, we don't allow any exports because later
-    %% passes cannot handle exports in combination with 'after'.
     {Evt0,St1} = exprs(Es, Vt, St0),
     TryLine = {'try',Line},
-    Uvt = vtunsafe(TryLine, Evt0, Vt),
-    Evt1 = vtupdate(Uvt, Evt0),
-    {Sccs,St2} = icrt_clauses(Scs++Ccs, TryLine, vtupdate(Evt1, Vt), St1),
-    Rvt0 = Sccs,
-    Rvt1 = vtupdate(vtunsafe(TryLine, Rvt0, Vt), Rvt0),
-    Evt2 = vtmerge(Evt1, Rvt1),
-    {Avt0,St} = exprs(As, vtupdate(Evt2, Vt), St2),
-    Avt1 = vtupdate(vtunsafe(TryLine, Avt0, Vt), Avt0),
-    Avt = vtmerge(Evt2, Avt1),
-    {Avt,St};
+    %% Variables from Es spill into Scs just like in case Es of Scs end,
+    {Svt,St2} = icrt_clauses(Scs, TryLine, vtupdate(Evt0, Vt), St1),
+    %% Variables from Es are not seen into Ccs.
+    {Cvt,St3} = icrt_clauses(Ccs, TryLine, Vt, St2),
+    %% Variables from Es, Scs and Ccs spill into As as if written as:
+    %% if _ -> case Es of Scs end; _ -> Ccs end, As.
+    Evt1 = icrt_export([vtupdate(Svt, Evt0), Cvt], Vt, TryLine),
+    {Avt,St} = exprs(As, vtupdate(Evt1, Vt), St3),
+    %% Variables from Avt behave as if put in a block.
+    {vtupdate(Avt, Evt1),St};
 expr({'catch',Line,E}, Vt, St0) ->
     %% No new variables added, flag new variables as unsafe.
     {Evt,St} = expr(E, Vt, St0),
