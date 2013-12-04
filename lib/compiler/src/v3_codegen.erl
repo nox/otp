@@ -630,29 +630,85 @@ select_cg(#l{ke={type_clause,Type,Scs}}, {var,V}, Tf, Vf, Bef, St0) ->
 			 {{Is,[Val]},{sr_merge(Int, Inta),Stb}}
 		 end, {void,St0}, Scs),
     OptVls = combine(lists:sort(combine(Vis))),
-    {Vls,Sis,St2} = select_labels(OptVls, St1, [], []),
-    {select_val_cg(Type, fetch_var(V, Bef), Vls, Tf, Vf, Sis), Aft, St2}.
+    {Vls,Sis0,St2} = select_labels(OptVls, St1, [], []),
+    {Sis1,St3} = select_val_cg(Type, fetch_var(V, Bef), Vls, Tf, Vf, Sis0, St2),
+    {Sis1,Aft,St3}.
 
-select_val_cg(tuple, R, [Arity,{f,Lbl}], Tf, Vf, [{label,Lbl}|Sis]) ->
-    [{test,is_tuple,{f,Tf},[R]},{test,test_arity,{f,Vf},[R,Arity]}|Sis];
-select_val_cg(tuple, R, Vls, Tf, Vf, Sis) ->
-    [{test,is_tuple,{f,Tf},[R]},{select_tuple_arity,R,{f,Vf},{list,Vls}}|Sis];
-select_val_cg(Type, R, [Val, {f,Lbl}], Fail, Fail, [{label,Lbl}|Sis]) ->
-    [{test,is_eq_exact,{f,Fail},[R,{Type,Val}]}|Sis];
-select_val_cg(Type, R, [Val, {f,Lbl}], Tf, Vf, [{label,Lbl}|Sis]) ->
-    [{test,select_type_test(Type),{f,Tf},[R]},
-     {test,is_eq_exact,{f,Vf},[R,{Type,Val}]}|Sis];
-select_val_cg(Type, R, Vls0, Tf, Vf, Sis) ->
-    Vls1 = map(fun ({f,_Lbl} = F) -> F;
-		   (Value) -> {Type,Value}
-	       end, Vls0),
-    [{test,select_type_test(Type),{f,Tf},[R]}, {select_val,R,{f,Vf},{list,Vls1}}|Sis].
-    
+select_val_cg(tuple, R, [{{f,Lbl},[Arity]}], Tf, Vf, [{label,Lbl}|Sis], St) ->
+    {[{test,is_tuple,{f,Tf},[R]},{test,test_arity,{f,Vf},[R,Arity]}|Sis],St};
+select_val_cg(tuple, R, Vls0, Tf, Vf, Sis, St) ->
+    Vls1 = lists:flatten([ [Arity,Lbl] || {Lbl,Vs} <- Vls0, Arity <- Vs ]),
+    {[{test,is_tuple,{f,Tf},[R]},{select_tuple_arity,R,{f,Vf},{list,Vls1}}|Sis],
+     St};
+select_val_cg(Type, R, [{{f,Lbl},[Val]}], Fail, Fail, [{label,Lbl}|Sis], St) ->
+    {[{test,is_eq_exact,{f,Fail},[R,{Type,Val}]}|Sis],St};
+select_val_cg(Type, R, [{{f,Lbl},[Val]}], Tf, Vf, [{label,Lbl}|Sis], St) ->
+    {[{test,select_type_test(Type),{f,Tf},[R]},
+      {test,is_eq_exact,{f,Vf},[R,{Type,Val}]}|Sis],
+     St};
+select_val_cg(integer, R, Vls0, Tf, Vf, Sis0, St0) ->
+    %% Here we try to optimise away select_val over long ranges of contiguous
+    %% values all jumping to the same label. The condition to trigger this
+    %% is that there should be at least 8 values to select over and that the
+    %% range should be at least as full as half the whole count of values.
+    Count = foldl(fun ({_,Vs}, Acc) -> length(Vs) + Acc end, 0, Vls0),
+    {Rls,Ols0} = take_contiguous_ranges(Count, Vls0),
+    Ols1 = lists:flatten([ [{integer,O},Lbl] || {Lbl,Os} <- Ols0, O <- Os ]),
+    Sis1 = case Ols1 of
+               [] -> [{jump,{f,Vf}}|Sis0];
+               Ols1 -> [{select_val,R,{f,Vf},{list,Ols1}}|Sis0]
+           end,
+    {Sis2,St1} = select_range_cg(R, Rls, Vf, {Sis1,St0}),
+    {[{test,is_integer,{f,Tf},[R]}|Sis2],St1};
+select_val_cg(Type, R, Vls0, Tf, Vf, Sis, St) ->
+    Vls1 = lists:flatten([ [{Type,V},Lbl] || {Lbl,Vs} <- Vls0, V <- Vs ]),
+    {[{test,select_type_test(Type),{f,Tf},[R]},
+      {select_val,R,{f,Vf},{list,Vls1}}|Sis],
+     St}.
+
+select_range_cg(R, [{Lbl,Rs}|Rls], Vf, Acc0) ->
+    Acc1 = foldl(fun ({B,E}, {Sis,St0}) ->
+                         {Nf,St1} = new_label(St0),
+                         {[{test,is_lt,{f,Nf},[R,{integer,B}]},
+                           {test,is_lt,Lbl,[R,{integer,E+1}]},
+                           {label,Nf}|Sis],St1}
+                 end, Acc0, Rs),
+    select_range_cg(R, Rls, Vf, Acc1);
+select_range_cg(_, [], _, Acc) ->
+    Acc.
+
+take_contiguous_ranges(Total, Vls) when Total > 8 ->
+    take_contiguous_ranges(Total div 2, Vls, [], []);
+take_contiguous_ranges(_, Vls) ->
+    {[],Vls}.
+
+take_contiguous_ranges(Threshold, [{Lbl,[V|T]=Vs}|Vls],
+                       Rls0, Ols0) when length(Vs) >= Threshold ->
+    {B,E,Rs0,Os0} = foldl(fun (I, {B,E,Rs,Os}) when I =:= E + 1 ->
+                                  {B,I,Rs,Os};
+                              (I, {B,E,Rs,Os}) when E - B >= Threshold ->
+                                  {I,I,[{B,E}|Rs],Os};
+                              (I, {B,E,Rs,Os}) ->
+                                  {I,I,Rs,lists:seq(B, E)++Os}
+                          end, {V,V,[],[]}, T),
+    {Rs,Os} = case E - B >= Threshold of
+                  true -> {[{B,E}|Rs0],Os0};
+                  false -> {Rs0,lists:seq(B, E)++Os0}
+              end,
+    Rls = case Rs of [] -> Rls0; Rs -> [{Lbl,Rs}|Rls0] end,
+    Ols = case Os of [] -> Rls0; Os -> [{Lbl,Os}|Ols0] end,
+    take_contiguous_ranges(Threshold, Vls, Rls, Ols);
+take_contiguous_ranges(Threshold, [Vl|Vls], Rls, Ols) ->
+    take_contiguous_ranges(Threshold, Vls, Rls, [Vl|Ols]);
+take_contiguous_ranges(_, [], Rls, Ols) ->
+    {Rls,Ols}.
+
 select_type_test(integer) -> is_integer;
 select_type_test(atom) -> is_atom;
 select_type_test(float) -> is_float.
 
-combine([{Is,Vs1}, {Is,Vs2}|Vis]) -> combine([{Is,Vs1 ++ Vs2}|Vis]);
+combine([{Is,Vs1}, {Is,Vs2}|Vis]) ->
+    combine([{Is,ordsets:union(Vs1, Vs2)}|Vis]);
 combine([V|Vis]) -> [V|combine(Vis)];
 combine([]) -> [].
 
@@ -662,9 +718,9 @@ select_labels([{Is,Vs}|Vis], St0, Vls, Sis) ->
 select_labels([], St, Vls, Sis) ->
     {Vls,append(Sis),St}.
 
-add_vls([V|Vs], Lbl, Acc) ->
-    add_vls(Vs, Lbl, [V, {f,Lbl}|Acc]);
-add_vls([], _, Acc) -> Acc.
+add_vls([], _, Acc) -> Acc;
+add_vls(Vs, Lbl, Acc) ->
+    [{{f,Lbl},Vs}|Acc].
 
 select_cons(#l{ke={val_clause,{cons,Es},B},i=I,vdb=Vdb}, V, Tf, Vf, Bef, St0) ->
     {Eis,Int,St1} = select_extract_cons(V, Es, I, Vdb, Bef, St0),
