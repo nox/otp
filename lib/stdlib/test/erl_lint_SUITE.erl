@@ -64,7 +64,7 @@
 	  too_many_arguments/1,
 	  basic_errors/1,bin_syntax_errors/1,
           predef/1,
-          maps/1,maps_type/1,otp_11851/1
+          maps/1,maps_type/1,otp_11851/1,'cond'/1
         ]).
 
 % Default timetrap timeout (set in init_per_testcase).
@@ -93,7 +93,7 @@ all() ->
      bif_clash, behaviour_basic, behaviour_multiple, otp_11861,
      otp_7550, otp_8051, format_warn, {group, on_load},
      too_many_arguments, basic_errors, bin_syntax_errors, predef,
-     maps, maps_type, otp_11851].
+     maps, maps_type, otp_11851, 'cond'].
 
 groups() -> 
     [{unused_vars_warn, [],
@@ -3831,6 +3831,14 @@ otp_11851(Config) when is_list(Config) ->
                   {6,erl_lint,{spec_fun_undefined,{a,1}}}],
           []}}
           ],
+    [] = run(Config, Ts),
+    ok.
+
+'cond'(Config) when is_list(Config) ->
+    Ts = [{cond_1,
+           <<"t(A) -> cond A =:= true -> ok; A =:= false -> error end.">>,
+           [],
+           []}],
     [] = run(Config, Ts),
     ok.
 

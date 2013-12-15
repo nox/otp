@@ -2107,6 +2107,9 @@ expr({block,_Line,Es}, Vt, St) ->
     exprs(Es, Vt, St);
 expr({'if',Line,Cs}, Vt, St) ->
     icrt_clauses(Cs, {'if',Line}, Vt, St);
+expr({'cond',Line,Cs}, Vt, St) ->
+    GuardF = fun ([[E]], Vt0, St0) -> expr(E, Vt0, St0) end,
+    icrt_clauses(Cs, {'cond',Line}, GuardF, Vt, St);
 expr({'case',Line,E,Cs}, Vt, St0) ->
     {Evt,St1} = expr(E, Vt, St0),
     {Cvt,St2} = icrt_clauses(Cs, {'case',Line}, vtupdate(Evt, Vt), St1),
@@ -2117,7 +2120,7 @@ expr({'receive',Line,Cs,To,ToEs}, Vt, St0) ->
     %% Are variables from the timeout expression visible in the clauses? NO!
     {Tvt,St1} = expr(To, Vt, St0),
     {Tevt,St2} = exprs(ToEs, Vt, St1),
-    {Cvt,St3} = icrt_clauses(Cs, Vt, St2),
+    {Cvt,St3} = clauses(Cs, Vt, St2),
     %% Csvts = [vtnew(Tevt, Vt)|Cvt],           %This is just NEW variables!
     Csvts = [Tevt|Cvt],
     Rvt = icrt_export(Csvts, Vt, {'receive',Line}),
@@ -3010,21 +3013,27 @@ check_local_opaque_types(St) ->
 %% icrt_clauses(Clauses, In, ImportVarTable, State) ->
 %%      {UpdVt,State}.
 
-icrt_clauses(Cs, In, Vt, St0) ->
-    {Csvt,St1} = icrt_clauses(Cs, Vt, St0),
+icrt_clauses(Cs, In, Vt, St) ->
+    icrt_clauses(Cs, In, fun guard/3, Vt, St).
+
+icrt_clauses(Cs, In, GuardF, Vt, St0) ->
+    {Csvt,St1} = clauses(Cs, GuardF, Vt, St0),
     UpdVt = icrt_export(Csvt, Vt, In),
     {UpdVt,St1}.
 
-%% icrt_clauses(Clauses, ImportVarTable, State) ->
+%% clauses(Clauses, ImportVarTable, State) ->
 %%      {NewVts,State}.
 
-icrt_clauses(Cs, Vt, St) ->
-    mapfoldl(fun (C, St0) -> icrt_clause(C, Vt, St0) end, St, Cs).
+clauses(Cs, Vt, St) ->
+  clauses(Cs, fun guard/3, Vt, St).
 
-icrt_clause({clause,_Line,H,G,B}, Vt0, St0) ->
+clauses(Cs, GuardF, Vt, St) ->
+    mapfoldl(fun (C, St0) -> clause(C, GuardF, Vt, St0) end, St, Cs).
+
+clause({clause,_Line,H,G,B}, GuardF, Vt0, St0) ->
     {Hvt,Binvt,St1} = head(H, Vt0, St0),
-    Vt1 = vtupdate(Hvt, Binvt),
-    {Gvt,St2} = guard(G, vtupdate(Vt1, Vt0), St1),
+    Vt1 = vtupdate(Hvt, vtupdate(Binvt, Vt0)),
+    {Gvt,St2} = GuardF(G, Vt1, St1),
     Vt2 = vtupdate(Gvt, Vt1),
     {Bvt,St3} = exprs(B, vtupdate(Vt2, Vt0), St2),
     {vtupdate(Bvt, Vt2),St3}.

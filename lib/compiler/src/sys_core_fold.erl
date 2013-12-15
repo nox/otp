@@ -1006,6 +1006,14 @@ eval_is_record(Call, Term, #c_literal{val=NeededTag},
     end;
 eval_is_record(Call, _, _, _, _) -> Call.
 
+%% is_not_boolean(Core) -> true | false.
+%%  Returns true if Core is definitely not a boolean.
+
+is_not_boolean(#c_literal{val=Val}) when not is_boolean(Val) -> true;
+is_not_boolean(#c_tuple{}) -> true;
+is_not_boolean(#c_cons{}) -> true;
+is_not_boolean(_) -> false.
+
 %% eval_setelement(Call, Pos, Tuple, NewVal) -> Core.
 %%  Evaluates setelement/3 if position Pos is an integer
 %%  the shape of the tuple Tuple is known.
@@ -1297,7 +1305,8 @@ warn_no_clause_match(CaseOrig, CaseOpt) ->
     OrigCs = cerl:case_clauses(CaseOrig),
     OptCs = cerl:case_clauses(CaseOpt),
     case any(fun(C) -> not is_compiler_generated(C) end, OrigCs) andalso
-	all(fun is_compiler_generated/1, OptCs) of
+         all(fun is_compiler_generated/1, OptCs) andalso
+         not is_cond_case(CaseOrig) of
 	true ->
 	    %% The original list of clauses did contain at least one
 	    %% user-specified clause, but none of them will match.
@@ -1393,6 +1402,12 @@ will_match_1({true,_}) -> yes.
 opt_bool_case(#c_case{arg=Arg}=Case0) ->
     case is_bool_expr(Arg) of
 	false ->
+	    case is_cond_case(Case0) andalso is_not_boolean(Arg) of
+		false ->
+		    ok;
+		true ->
+		    add_warning(Case0, no_cond_match)
+	    end,
 	    Case0;
 	true ->
 	    try opt_bool_clauses(Case0) of
@@ -2848,6 +2863,10 @@ is_result_unwanted(Core) ->
     Ann = cerl:get_ann(Core),
     member(result_not_wanted, Ann).
 
+is_cond_case(Core) ->
+    Anno = core_lib:get_anno(Core),
+    member(cond_case, Anno).
+
 get_warnings() ->
     ordsets:from_list((erase({?MODULE,warnings}))).
 
@@ -2856,6 +2875,7 @@ get_warnings() ->
 	       | 'bin_partition' | 'bin_var_used' | 'bin_var_used_in_guard'
 	       | 'embedded_binary_size' | 'nomatch_clause_type'
 	       | 'nomatch_guard' | 'nomatch_shadow' | 'no_clause_match'
+	       | 'no_cond_match'
 	       | 'orig_bin_var_used_in_guard' | 'result_ignored'
 	       | 'useless_building'
 	       | {'eval_failure', term()}
@@ -2887,6 +2907,8 @@ format_error(nomatch_guard) ->
     "the guard for this clause evaluates to 'false'";
 format_error(no_clause_match) ->
     "no clause will ever match";
+format_error(no_cond_match) ->
+    "this clause will crash";
 format_error(nomatch_clause_type) ->
     "this clause cannot match because of different types/sizes";
 format_error({no_effect,{erlang,F,A}}) ->
