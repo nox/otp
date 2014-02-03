@@ -123,8 +123,8 @@ mk_debug_calltrace(MFA, Env, Code) ->
 -spec module([#function{}], comp_options()) -> hipe_beam_to_icode_ret().
 
 module(BeamFuns, Options) ->
-  BeamCode0 = [beam_disasm:function__code(F) || F <- BeamFuns],
-  {ModCode, ClosureInfo} = preprocess_code(BeamCode0),
+  ModCode = [beam_disasm:function__code(F) || F <- BeamFuns],
+  ClosureInfo = find_closure_info(ModCode),
   pp_beam(ModCode, Options),
   [trans_beam_function_chunk(FunCode, ClosureInfo) || FunCode <- ModCode].
 
@@ -649,8 +649,7 @@ trans_fun([{call_fun,N}|Instructions], Env) ->
   Dst = [mk_var({r,0})],
   [hipe_icode:mk_comment('call_fun'),
    hipe_icode:mk_primop(Dst,call_fun,Args) | trans_fun(Instructions,Env)];
-%%--- patched_make_fun --- make_fun/make_fun2 after fixes
-trans_fun([{patched_make_fun,MFA,Magic,FreeVarNum,Index}|Instructions], Env) ->
+trans_fun([{make_fun2,MFA,Index,Magic,FreeVarNum}|Instructions], Env) ->
   Args = extract_fun_args(FreeVarNum),
   Dst = [mk_var({r,0})],
   Fun = hipe_icode:mk_primop(Dst,
@@ -1730,8 +1729,8 @@ mod_find_closure_info([FunCode|Fs], CI) ->
 mod_find_closure_info([], CI) ->
   CI.
 
-find_closure_info([{patched_make_fun,MFA={_M,_F,A},_Magic,FreeVarNum,_Index}|BeamCode],
-		  ClosureInfo) ->
+find_closure_info([{make_fun2,MFA={_M,_F,A},_Index,_Magic,FreeVarNum}|BeamCode],
+		  ClosureInfo) when FreeVarNum =/= 0 ->
   NewClosure = %% A-FreeVarNum+1 (The real arity + 1 for the closure)
     #closure_info{mfa=MFA, arity=A-FreeVarNum+1, fv_arity=FreeVarNum},
   find_closure_info(BeamCode, [NewClosure|ClosureInfo]);
@@ -1804,45 +1803,6 @@ split_params(1, [], Args) ->
   {lists:reverse([Closure|Args]), Closure, []};
 split_params(N, [ArgN|OrgArgs], Args) ->
   split_params(N-1, OrgArgs, [ArgN|Args]).
-
-%%-----------------------------------------------------------------------
-
-preprocess_code(ModuleCode) ->
-  PatchedCode = patch_R7_funs(ModuleCode),
-  ClosureInfo = find_closure_info(PatchedCode),
-  {PatchedCode, ClosureInfo}.
-
-%%-----------------------------------------------------------------------
-%% Patches the "make_fun" BEAM instructions of R7 so that they also
-%% contain the index that the BEAM loader generates for funs.
-%% 
-%% The index starts from 0 and is incremented by 1 for each make_fun
-%% instruction encountered.
-%%
-%% Retained only for compatibility with BEAM code prior to R8.
-%%
-%% Temporarily, it also rewrites R8-PRE-RELEASE "make_fun2"
-%% instructions, since their embedded indices don't work.
-%%-----------------------------------------------------------------------
-
-patch_R7_funs(ModuleCode) ->
-  patch_make_funs(ModuleCode, 0).
-
-patch_make_funs([FunCode0|Fs], FunIndex0) ->
-  {PatchedFunCode,FunIndex} = patch_make_funs(FunCode0, FunIndex0, []),
-  [PatchedFunCode|patch_make_funs(Fs, FunIndex)];
-patch_make_funs([], _) -> [].
-
-patch_make_funs([{make_fun,MFA,Magic,FreeVarNum}|Is], FunIndex, Acc) ->
-  Patched = {patched_make_fun,MFA,Magic,FreeVarNum,FunIndex},
-  patch_make_funs(Is, FunIndex+1, [Patched|Acc]);
-patch_make_funs([{make_fun2,MFA,_BogusIndex,Magic,FreeVarNum}|Is], FunIndex, Acc) ->
-  Patched = {patched_make_fun,MFA,Magic,FreeVarNum,FunIndex},
-  patch_make_funs(Is, FunIndex+1, [Patched|Acc]);
-patch_make_funs([I|Is], FunIndex, Acc) ->
-  patch_make_funs(Is, FunIndex, [I|Acc]);
-patch_make_funs([], FunIndex, Acc) ->
-  {lists:reverse(Acc),FunIndex}.
 
 %%-----------------------------------------------------------------------
 

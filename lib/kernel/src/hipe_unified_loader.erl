@@ -432,7 +432,7 @@ export_funs(Mod, Beam, Addresses, ClosuresToPatch) ->
 
 patch([{Type,SortedRefs}|Rest], CodeAddress, ConstMap2, Addresses, TrampolineMap) ->
   ?debug_msg("Patching ~w at [~w+offset] with ~w\n",
-	     [Type,CodeAddress,SortedRefs]),
+	     [?EXT2PATCH_TYPE(Type),CodeAddress,SortedRefs]),
   case ?EXT2PATCH_TYPE(Type) of 
     call_local -> 
       patch_call(SortedRefs, CodeAddress, Addresses, 'local', TrampolineMap);
