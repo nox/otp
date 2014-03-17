@@ -1556,7 +1556,11 @@ bad_constants(Config) when is_list(Config) ->
 
 bad_guards(Config) when is_list(Config) ->
     if erlang:float(self()); true -> ok end,
+    ok = norell_guard(1, [2]),
     ok.
+
+norell_guard(X, [_]) when {{X}}, -X -> not_ok;
+norell_guard(_, _) -> ok.
 
 %% Call this function to turn off constant propagation.
 id(I) -> I.

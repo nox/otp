@@ -198,6 +198,7 @@ ensure_opt_safe(Bl, NewCode, OldIs, Fail, PrecedingCode, St) ->
 
     PrevDst = dst_regs(Bl),
     NewDst = dst_regs(NewCode),
+    io:format("~p~n~p~n~p~n~n", [Bl,NewCode,{PrevDst,NewDst}]),
     NotSet = ordsets:subtract(PrevDst, NewDst),
     MustBeKilled = ordsets:subtract(NotSet, InitInPreceding),
 
@@ -331,8 +332,8 @@ dst_regs([{block,Bl}|Is], Acc) ->
     dst_regs(Bl, dst_regs(Is, Acc));
 dst_regs([{set,[D],_,{bif,_,{f,_}}}|Is], Acc) ->
     dst_regs(Is, [D|Acc]);
-dst_regs([{set,[D],_,{alloc,_,{gc_bif,_,{f,_}}}}|Is], Acc) ->
-    dst_regs(Is, [D|Acc]);
+dst_regs([{set,[D],_,{alloc,Live,{gc_bif,_,{f,_}}}}|Is], Acc) ->
+    dst_regs(Is, [D|[ {x,X} || X <- lists:seq(1, Live-1) ]++Acc]);
 dst_regs([{set,[D],_,move}|Is], Acc) ->
     dst_regs(Is, [D|Acc]);
 dst_regs([_|Is], Acc) ->
