@@ -822,27 +822,7 @@ scan_define([{'(',_Lp},{Type,_Lm,M}=Mac,{',',Lc}|Toks], _Def, From, St)
   when Type =:= atom; Type =:= var ->
     case catch macro_expansion(Toks, Lc) of
         Expansion when is_list(Expansion) ->
-            case dict:find({atom,M}, St#epp.macs) of
-                {ok, Defs} when is_list(Defs) ->
-                    %% User defined macros: can be overloaded
-                    case proplists:is_defined(none, Defs) of
-                        true ->
-                            epp_reply(From, {error,{loc(Mac),epp,{redefine,M}}}),
-                            wait_req_scan(St);
-                        false ->
-                            scan_define_cont(From, St,
-                                             {atom, M},
-                                             {none, {none,Expansion}})
-                    end;
-                {ok, _PreDef} ->
-                    %% Predefined macros: cannot be overloaded
-                    epp_reply(From, {error,{loc(Mac),epp,{redefine_predef,M}}}),
-                    wait_req_scan(St);
-                error ->
-                    scan_define_cont(From, St,
-                                     {atom, M},
-                                     {none, {none,Expansion}})
-            end;
+            scan_define(loc(Mac), {M,none}, {none,Expansion}, From, St);
         {error,ErrL,What} ->
             epp_reply(From, {error,{ErrL,epp,What}}),
             wait_req_scan(St)
@@ -850,28 +830,9 @@ scan_define([{'(',_Lp},{Type,_Lm,M}=Mac,{',',Lc}|Toks], _Def, From, St)
 scan_define([{'(',_Lp},{Type,_Lm,M}=Mac,{'(',_Lc}|Toks], Def, From, St)
   when Type =:= atom; Type =:= var ->
     case catch macro_pars(Toks, []) of
-        {ok, {As,Me}} ->
-            Len = length(As),
-            case dict:find({atom,M}, St#epp.macs) of
-                {ok, Defs} when is_list(Defs) ->
-                    %% User defined macros: can be overloaded
-                    case proplists:is_defined(Len, Defs) of
-                        true ->
-                            epp_reply(From,{error,{loc(Mac),epp,{redefine,M}}}),
-                            wait_req_scan(St);
-                        false ->
-                            scan_define_cont(From, St, {atom, M},
-                                             {Len, {As, Me}})
-                    end;
-                {ok, _PreDef} ->
-                    %% Predefined macros: cannot be overloaded
-                    %% (There are currently no predefined F(...) macros.)
-                    epp_reply(From, {error,{loc(Mac),epp,{redefine_predef,M}}}),
-                    wait_req_scan(St);
-                error ->
-                    scan_define_cont(From, St, {atom, M}, {Len, {As, Me}})
-            end;
-	{error,ErrL,What} ->
+        {ok, {As,_}=MacroDef} ->
+            scan_define(loc(Mac), {M,length(As)}, MacroDef, From, St);
+        {error,ErrL,What} ->
             epp_reply(From, {error,{ErrL,epp,What}}),
             wait_req_scan(St);
         _ ->
@@ -881,6 +842,25 @@ scan_define([{'(',_Lp},{Type,_Lm,M}=Mac,{'(',_Lc}|Toks], Def, From, St)
 scan_define(_Toks, Def, From, St) ->
     epp_reply(From, {error,{loc(Def),epp,{bad,define}}}),
     wait_req_scan(St).
+
+scan_define(Loc, {Name,Arity}, MacroDef, From, St) ->
+    case dict:find({atom,Name}, St#epp.macs) of
+        {ok, Defs} when is_list(Defs) ->
+            %% User defined macros: can be overloaded
+            case proplists:is_defined(Arity, Defs) of
+                true ->
+                    epp_reply(From, {error,{Loc,epp,{redefine,Name}}}),
+                    wait_req_scan(St);
+                false ->
+                    scan_define_cont(From, St, {atom,Name}, {Arity,MacroDef})
+            end;
+        {ok, _PreDef} ->
+            %% Predefined macros: cannot be overloaded
+            epp_reply(From, {error,{Loc,epp,{redefine_predef,Name}}}),
+            wait_req_scan(St);
+        error ->
+            scan_define_cont(From, St, {atom,Name}, {Arity,MacroDef})
+    end.
 
 %%% Detection of circular macro expansions (which would either keep
 %%% the compiler looping forever, or run out of memory):
