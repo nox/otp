@@ -198,6 +198,8 @@ format_error({mismatch,M}) ->
     io_lib:format("argument mismatch for macro '~s'", [M]);
 format_error({arg_error,M}) ->
     io_lib:format("badly formed argument for macro '~s'", [M]);
+format_error({redefine,user,M}) ->
+    io_lib:format("redefining user macro '~s'", [M]);
 format_error({redefine,M}) ->
     io_lib:format("redefining macro '~s'", [M]);
 format_error({redefine_predef,M}) ->
@@ -586,7 +588,7 @@ user_predef([{M,Val}|Pdm], Ms) when is_atom(M) ->
 	    {error,{redefine_predef,M}};
 	error ->
 	    Exp = erl_parse:tokens(erl_parse:abstract(Val)),
-	    user_predef(Pdm, dict:store({atom,M}, [{none, {none,Exp}}], Ms))
+            user_predef(Pdm, dict:store({atom,M}, [{none,user,{none,Exp}}], Ms))
     end;
 user_predef([M|Pdm], Ms) when is_atom(M) ->
     case dict:find({atom,M}, Ms) of
@@ -595,8 +597,8 @@ user_predef([M|Pdm], Ms) when is_atom(M) ->
 	{ok,_Def} -> %% Predefined macros
 	    {error,{redefine_predef,M}};
 	error ->
-	    user_predef(Pdm,
-	                dict:store({atom,M}, [{none, {none,[{atom,1,true}]}}], Ms))
+            Defs = [{none,{none,user,[{atom,1,true}]}}],
+            user_predef(Pdm, dict:store({atom,M}, Defs, Ms))
     end;
 user_predef([Md|_Pdm], _Ms) -> {error,{bad,Md}};
 user_predef([], Ms) -> {ok,Ms}.
@@ -611,7 +613,7 @@ wait_request(St) ->
     receive
 	{epp_request,From,scan_erl_form} -> From;
 	{epp_request,From,macro_defs} ->
-	    epp_reply(From, dict:to_list(St#epp.macs)),
+            epp_reply(From, macro_defs_to_list(St#epp.macs)),
 	    wait_request(St);
 	{epp_request,From,close} ->
 	    close_file(St),
@@ -623,6 +625,12 @@ wait_request(St) ->
 	    io:fwrite("Epp: unknown '~w'\n", [Other]),
 	    wait_request(St)
     end.
+
+macro_defs_to_list(Macs) ->
+    [ begin
+          Defs1 = [ {Arity,Def} || {Arity,_,Def} <- Defs0 ],
+          {Name,Defs1}
+      end || {Name,Defs0} <- dict:to_list(Macs) ].
 
 close_file(#epp{pre_opened = true}) ->
     ok;
@@ -847,19 +855,21 @@ scan_define(Loc, {Name,Arity}, MacroDef, From, St) ->
     case dict:find({atom,Name}, St#epp.macs) of
         {ok, Defs} when is_list(Defs) ->
             %% User defined macros: can be overloaded
-            case proplists:is_defined(Arity, Defs) of
-                true ->
-                    epp_reply(From, {error,{Loc,epp,{redefine,Name}}}),
+            case lists:keyfind(Arity, 1, Defs) of
+                {_,OldFileLoc,_} ->
+                    Reply = {error,{Loc,epp,{redefine,Name,OldFileLoc}}},
+                    epp_reply(From, Reply),
                     wait_req_scan(St);
                 false ->
-                    scan_define_cont(From, St, {atom,Name}, {Arity,MacroDef})
+                    scan_define_cont(Loc, {atom,Name}, {Arity,MacroDef},
+                                     From, St)
             end;
         {ok, _PreDef} ->
             %% Predefined macros: cannot be overloaded
             epp_reply(From, {error,{Loc,epp,{redefine_predef,Name}}}),
             wait_req_scan(St);
         error ->
-            scan_define_cont(From, St, {atom,Name}, {Arity,MacroDef})
+            scan_define_cont(Loc, {atom,Name}, {Arity,MacroDef}, From, St)
     end.
 
 %%% Detection of circular macro expansions (which would either keep
@@ -871,14 +881,14 @@ scan_define(Loc, {Name,Arity}, MacroDef, From, St) ->
 %%% the information from St#epp.uses is traversed, and if a circularity
 %%% is detected, an error message is thrown.
 
-scan_define_cont(F, St, M, {Arity, Def}) ->
-    Ms = dict:append_list(M, [{Arity, Def}], St#epp.macs),
+scan_define_cont(Loc, M, {Arity,Def}, From, St) ->
+    Ms = dict:append_list(M, [{Arity,{St#epp.name2,Loc},Def}], St#epp.macs),
     try dict:append_list(M, [{Arity, macro_uses(Def)}], St#epp.uses) of
         U ->
-            scan_toks(F, St#epp{uses=U, macs=Ms})
+            scan_toks(From, St#epp{uses=U, macs=Ms})
     catch
         {error, Line, Reason} ->
-            epp_reply(F, {error,{Line,epp,Reason}}),
+            epp_reply(From, {error,{Line,epp,Reason}}),
             wait_req_scan(St)
     end.
 
@@ -1167,14 +1177,12 @@ expand_macro1(Type, Lm, M, Toks, Ms) ->
             throw({error,Lm,{undefined,M,Arity}});
         {ok, undefined} -> %% Predefined macro without definition
             throw({error,Lm,{undefined,M,Arity}});
-        {ok, [{none, Def}]} ->
+        {ok, [{none,_,Def}]} ->
             {ok, Def};
         {ok, Defs} when is_list(Defs) ->
-            case proplists:get_value(Arity, Defs) of
-                undefined ->
-                    throw({error,Lm,{mismatch,M}});
-                Def ->
-                    {ok, Def}
+            case lists:keyfind(Arity, 1, Defs) of
+                {_,_,Def} -> {ok,Def};
+                false -> throw({error,Lm,{mismatch,M}})
             end;
         {ok, PreDef} -> %% Predefined macro
             {ok, PreDef}
