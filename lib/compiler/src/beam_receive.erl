@@ -24,7 +24,7 @@
 %%%
 %%% In code such as:
 %%%
-%%%    Ref = make_ref(),        %Or erlang:monitor(process, Pid)
+%%%    Ref = make_ref(),        % Or erlang:monitor(process, Pid)
 %%%      .
 %%%      .
 %%%      .
@@ -86,13 +86,12 @@ function({function,Name,Arity,Entry,Is}) ->
 
 opt([{call_ext,A,{extfunc,erlang,spawn_monitor,A}}=I0|Is0], D, Acc)
   when A =:= 1; A =:= 3 ->
-    case ref_in_tuple(Is0) of
+    case new_in_tuple(Is0) of
 	no ->
 	    opt(Is0, D, [I0|Acc]);
 	{yes,Regs,Is1,MatchReversed} ->
-	    %% The call creates a brand new reference. Now
-	    %% search for a receive statement in the same
-	    %% function that will match against the reference.
+            %% The call creates fresh values. Now search for a receive statement
+            %% in the same function that will match against the reference.
 	    case opt_recv(Is1, Regs, D) of
 		no ->
 		    opt(Is0, D, [I0|Acc]);
@@ -101,7 +100,7 @@ opt([{call_ext,A,{extfunc,erlang,spawn_monitor,A}}=I0|Is0], D, Acc)
 	    end
     end;
 opt([{call_ext,Arity,{extfunc,erlang,Name,Arity}}=I|Is0], D, Acc) ->
-    case creates_new_ref(Name, Arity) of
+    case creates_new_value(Name, Arity) of
 	true ->
 	    %% The call creates a brand new reference. Now
 	    %% search for a receive statement in the same
@@ -120,31 +119,40 @@ opt([I|Is], D, Acc) ->
 opt([], _, Acc) ->
     reverse(Acc).
 
-ref_in_tuple([{test,is_tuple,_,[{x,0}]}=I1,
-	      {test,test_arity,_,[{x,0},2]}=I2,
-	      {block,[{set,[_],[{x,0}],{get_tuple_element,0}},
-		      {set,[Dst],[{x,0}],{get_tuple_element,1}}|Bl]}=I3|Is]) ->
-    ref_in_tuple_1(Bl, Dst, Is, [I3,I2,I1]);
-ref_in_tuple([{test,is_tuple,_,[{x,0}]}=I1,
-	      {test,test_arity,_,[{x,0},2]}=I2,
-	      {block,[{set,[Dst],[{x,0}],{get_tuple_element,1}}|Bl]}=I3|Is]) ->
-    ref_in_tuple_1(Bl, Dst, Is, [I3,I2,I1]);
-ref_in_tuple(_) -> no.
+new_in_tuple([{test,is_tuple,_,[{x,0}]}=I1,
+              {test,test_arity,_,[{x,0},2]}=I2,
+              {block,[{set,[Dst1],[{x,0}],{get_tuple_element,0}},
+                      {set,[Dst2],[{x,0}],{get_tuple_element,1}}|Bl]}=I3|Is]) ->
+    new_in_tuple(Bl, [Dst1,Dst2], Is, [I3,I2,I1]);
+new_in_tuple([{test,is_tuple,_,[{x,0}]}=I1,
+              {test,test_arity,_,[{x,0},2]}=I2,
+              {block,[{set,[Dst],[{x,0}],{get_tuple_element,I}}|Bl]}=I3|Is])
+            when I =:= 0; I =:= 1 ->
+    new_in_tuple(Bl, [Dst], Is, [I3,I2,I1]);
+new_in_tuple(_) -> no.
 
-ref_in_tuple_1(Bl, Dst, Is, MatchReversed) ->
-    Regs0 = regs_init_singleton(Dst),
+new_in_tuple(Bl, Dst, Is, MatchReversed) ->
+    Regs0 = regs_init(Dst),
     Regs = opt_update_regs_bl(Bl, Regs0),
     {yes,Regs,Is,MatchReversed}.
 
-%% creates_new_ref(Name, Arity) -> true|false.
-%%  Return 'true' if the BIF Name/Arity will create a new reference.
-creates_new_ref(monitor, 2) -> true;
-creates_new_ref(make_ref, 0) -> true;
-creates_new_ref(_, _) -> false.
+%% creates_new_value(Name, Arity) -> true|false.
+%%  Return 'true' if the BIF Name/Arity will create a new value.
+creates_new_value(monitor, 2) -> true;
+creates_new_value(make_ref, 0) -> true;
+creates_new_value(spawn, 1) -> true;
+creates_new_value(spawn, 2) -> true;
+creates_new_value(spawn, 3) -> true;
+creates_new_value(spawn, 4) -> true;
+creates_new_value(spawn_link, 1) -> true;
+creates_new_value(spawn_link, 2) -> true;
+creates_new_value(spawn_link, 3) -> true;
+creates_new_value(spawn_link, 4) -> true;
+creates_new_value(_, _) -> false.
 
 %% opt_recv([Instruction], Regs, LabelIndex) -> no|{yes,[Instruction]}
 %%  Search for a receive statement that will only retrieve messages
-%%  that contain the newly created reference (which is currently in {x,0}).
+%%  that contain the newly created values (which are currently in Regs).
 opt_recv(Is, Regs, D) ->
     L = gb_sets:empty(),
     opt_recv(Is, D, Regs, L, []).
@@ -153,11 +161,11 @@ opt_recv([{label,L}=Lbl,{loop_rec,{f,Fail},_}=Loop|Is], D, R0, _, Acc) ->
     R = regs_kill_not_live(0, R0),
     case regs_empty(R) of
 	false ->
-	    %% We now have the new reference in Y registers
-	    %% and the current instruction is the beginning of a
-	    %% receive statement. We must now verify that only messages
-	    %% that contain the reference will be matched.
-	    case opt_ref_used(Is, R, Fail, D) of
+            %% We now have the new values in Y registers and the current
+            %% instruction is the beginning of a receive statement. We must now
+            %% verify that only messages that contain the reference will be
+            %% matched.
+            case opt_new_used(Is, R, Fail, D) of
 		false ->
 		    no;
 		true ->
@@ -171,8 +179,8 @@ opt_recv([I|Is], D, R0, L0, Acc) ->
     {R,L} = opt_update_regs(I, R0, L0),
     case regs_empty(R) of
 	true ->
-	    %% The reference is no longer alive. There is no
-	    %% point in continuing the search.
+	    %% The new values are no longer alive. There is no point in
+            %% continuing the search.
 	    no;
 	false ->
 	    opt_recv(Is, D, R, L, [I|Acc])
@@ -226,9 +234,10 @@ opt_update_regs_bl([{set,Ds,_,_}|Is], Regs0) ->
     opt_update_regs_bl(Is, Regs);
 opt_update_regs_bl([], Regs) -> Regs.
 
-%% opt_ref_used([Instruction], RefRegs, FailLabel, LabelIndex) -> true|false
-%%  Return 'true' if it is certain that only messages that contain the same
-%%  reference as in RefRegs can be matched out. Otherwise return 'false'.
+%% opt_new_used([Instruction], NewRegs, FailLabel, LabelIndex) -> true|false
+%%  Return 'true' if it is certain that only messages that contain at least one
+%%  of the new values as in NewRegs can be matched out. Otherwise return
+%%  'false'.
 %%
 %%  Basically, we follow all possible paths through the receive statement.
 %%  If all paths are safe, we return 'true'.
@@ -236,20 +245,20 @@ opt_update_regs_bl([], Regs) -> Regs.
 %%  A branch to FailLabel is safe, because it exits the receive statement
 %%  and no further message may be matched out.
 %%
-%%  If a path hits an comparision between RefRegs and part of the message,
+%%  If a path hits an comparision between NewRegs and part of the message,
 %%  that path is safe (any messages that may be matched further down the
-%%  path is guaranteed to contain the reference).
+%%  path is guaranteed to contain a new value).
 %%
 %%  Otherwise, if we hit a 'remove_message' instruction, we give up
 %%  and return 'false' (the optimization is definitely unsafe). If
 %%  we hit an unrecognized instruction, we also give up and return
 %%  'false' (the optimization may be unsafe).
 
-opt_ref_used(Is, RefRegs, Fail, D) ->
+opt_new_used(Is, NewRegs, Fail, D) ->
     Done = gb_sets:singleton(Fail),
     Regs = regs_init_x0(),
     try
-	_ = opt_ref_used_1(Is, RefRegs, D, Done, Regs),
+	_ = opt_new_used(Is, NewRegs, D, Done, Regs),
 	true
     catch
 	throw:not_used ->
@@ -258,86 +267,84 @@ opt_ref_used(Is, RefRegs, Fail, D) ->
 
 %% This functions only returns if all paths through the receive
 %% statement are safe, and throws an 'not_used' term otherwise.
-opt_ref_used_1([{block,Bl}|Is], RefRegs, D, Done, Regs0) ->
-    Regs = opt_ref_used_bl(Bl, Regs0),
-    opt_ref_used_1(Is, RefRegs, D, Done, Regs);
-opt_ref_used_1([{test,is_eq_exact,{f,Fail},Args}|Is],
-	       RefRegs, D, Done0, Regs) ->
-    Done = opt_ref_used_at(Fail, RefRegs, D, Done0, Regs),
-    case is_ref_msg_comparison(Args, RefRegs, Regs) of
+opt_new_used([{block,Bl}|Is], NewRegs, D, Done, Regs0) ->
+    Regs = opt_new_used_bl(Bl, Regs0),
+    opt_new_used(Is, NewRegs, D, Done, Regs);
+opt_new_used([{test,is_eq_exact,{f,Fail},Args}|Is], NewRegs, D, Done0, Regs) ->
+    Done = opt_new_used_at(Fail, NewRegs, D, Done0, Regs),
+    case is_new_msg_comparison(Args, NewRegs, Regs) of
 	false ->
-	    opt_ref_used_1(Is, RefRegs, D, Done, Regs);
+            opt_new_used(Is, NewRegs, D, Done, Regs);
 	true ->
 	    %% The instructions that follow (Is) can only be executed
-	    %% if the message contains the same reference as in RefRegs.
+            %% if the message contains a new value from Regs.
 	    Done
     end;
-opt_ref_used_1([{test,is_ne_exact,{f,Fail},Args}|Is],
-	       RefRegs, D, Done0, Regs) ->
-    Done = opt_ref_used_1(Is, RefRegs, D, Done0, Regs),
-    case is_ref_msg_comparison(Args, RefRegs, Regs) of
+opt_new_used([{test,is_ne_exact,{f,Fail},Args}|Is], NewRegs, D, Done0, Regs) ->
+    Done = opt_new_used(Is, NewRegs, D, Done0, Regs),
+    case is_new_msg_comparison(Args, NewRegs, Regs) of
 	false ->
-	    opt_ref_used_at(Fail, RefRegs, D, Done, Regs);
+            opt_new_used_at(Fail, NewRegs, D, Done, Regs);
 	true ->
 	    Done
     end;
-opt_ref_used_1([{test,_,{f,Fail},_}|Is], RefRegs, D, Done0, Regs) ->
-    Done = opt_ref_used_at(Fail, RefRegs, D, Done0, Regs),
-    opt_ref_used_1(Is, RefRegs, D, Done, Regs);
-opt_ref_used_1([{select,_,_,{f,Fail},List}|_], RefRegs, D, Done, Regs) ->
+opt_new_used([{test,_,{f,Fail},_}|Is], NewRegs, D, Done0, Regs) ->
+    Done = opt_new_used_at(Fail, NewRegs, D, Done0, Regs),
+    opt_new_used(Is, NewRegs, D, Done, Regs);
+opt_new_used([{select,_,_,{f,Fail},List}|_], NewRegs, D, Done, Regs) ->
     Lbls = [F || {f,F} <- List] ++ [Fail],
-    opt_ref_used_in_all(Lbls, RefRegs, D, Done, Regs);
-opt_ref_used_1([{label,Lbl}|Is], RefRegs, D, Done, Regs) ->
+    opt_new_used_in_all(Lbls, NewRegs, D, Done, Regs);
+opt_new_used([{label,Lbl}|Is], NewRegs, D, Done, Regs) ->
     case gb_sets:is_member(Lbl, Done) of
 	true -> Done;
-	false -> opt_ref_used_1(Is, RefRegs, D, Done, Regs)
+        false -> opt_new_used(Is, NewRegs, D, Done, Regs)
     end;
-opt_ref_used_1([{loop_rec_end,_}|_], _, _, Done, _) ->
+opt_new_used([{loop_rec_end,_}|_], _, _, Done, _) ->
     Done;
-opt_ref_used_1([_I|_], _RefReg, _D, _Done, _Regs) ->
+opt_new_used([_I|_], _NewReg, _D, _Done, _Regs) ->
     %% The optimization may be unsafe.
     throw(not_used).
 
 %% is_ref_msg_comparison(Args, RefRegs, RegisterSet) -> true|false.
 %%  Return 'true' if Args denotes a comparison between the
 %%  reference and message or part of the message.
-is_ref_msg_comparison([R1,R2], RefRegs, Regs) ->
+is_new_msg_comparison([R1,R2], RefRegs, Regs) ->
     (regs_is_member(R2, RefRegs) andalso regs_is_member(R1, Regs)) orelse
     (regs_is_member(R1, RefRegs) andalso regs_is_member(R2, Regs)).
 
-opt_ref_used_in_all([L|Ls], RefRegs, D, Done0, Regs) ->
-    Done = opt_ref_used_at(L, RefRegs, D, Done0, Regs),
-    opt_ref_used_in_all(Ls, RefRegs, D, Done, Regs);
-opt_ref_used_in_all([], _, _, Done, _) -> Done.
+opt_new_used_in_all([L|Ls], NewRegs, D, Done0, Regs) ->
+    Done = opt_new_used_at(L, NewRegs, D, Done0, Regs),
+    opt_new_used_in_all(Ls, NewRegs, D, Done, Regs);
+opt_new_used_in_all([], _, _, Done, _) -> Done.
 
-opt_ref_used_at(Fail, RefRegs, D, Done0, Regs) ->
+opt_new_used_at(Fail, NewRegs, D, Done0, Regs) ->
     case gb_sets:is_member(Fail, Done0) of
 	true ->
 	    Done0;
 	false ->
 	    Is = beam_utils:code_at(Fail, D),
-	    Done = opt_ref_used_1(Is, RefRegs, D, Done0, Regs),
+            Done = opt_new_used(Is, NewRegs, D, Done0, Regs),
 	    gb_sets:add(Fail, Done)
     end.
 
-opt_ref_used_bl([{set,[],[],remove_message}|_], _) ->
+opt_new_used_bl([{set,[],[],remove_message}|_], _) ->
     %% We have proved that a message that does not depend on the
     %% reference can be matched out.
     throw(not_used);
-opt_ref_used_bl([{set,Ds,Ss,_}|Is], Regs0) ->
+opt_new_used_bl([{set,Ds,Ss,_}|Is], Regs0) ->
     case regs_all_members(Ss, Regs0) of
 	false ->
 	    %% The destination registers may be assigned values that
 	    %% are not dependent on the message being matched.
 	    Regs = regs_kill(Ds, Regs0),
-	    opt_ref_used_bl(Is, Regs);
+            opt_new_used_bl(Is, Regs);
 	true ->
 	    %% All the sources depend on the message directly or
 	    %% indirectly.
 	    Regs = regs_add_list(Ds, Regs0),
-	    opt_ref_used_bl(Is, Regs)
+            opt_new_used_bl(Is, Regs)
     end;
-opt_ref_used_bl([], Regs) -> Regs.
+opt_new_used_bl([], Regs) -> Regs.
 
 %%%
 %%% Functions for keeping track of a set of registers.
@@ -349,11 +356,11 @@ opt_ref_used_bl([], Regs) -> Regs.
 regs_init() ->
     {0,0}.
 
-%% regs_init_singleton(Register) -> RegisterSet
-%%  Return a set that only contains one register.
+%% regs_inits(Registers) -> RegisterSet
+%%  Return a set that contains the given registers.
 
-regs_init_singleton(Reg) ->
-    regs_add(Reg, regs_init()).
+regs_init(Regs) ->
+    foldl(fun regs_add/2, regs_init(), Regs).
 
 %% regs_init_x0() -> RegisterSet
 %%  Return a set that only contains the {x,0} register.
