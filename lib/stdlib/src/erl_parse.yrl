@@ -923,22 +923,32 @@ abstract(T) ->
 
 -type encoding_func() :: fun((non_neg_integer()) -> boolean()).
 
-%%% abstract/2 takes line and encoding options
+%%% abstract/2 takes location and encoding options
 -spec abstract(Data, Options) -> AbsTerm when
       Data :: term(),
-      Options :: Line | [Option],
-      Option :: {line, Line} | {encoding, Encoding},
+      Options :: Location | [Option],
+      Option :: {line, Line} | {column, Column} | {encoding, Encoding},
       Encoding :: 'latin1' | 'unicode' | 'utf8' | 'none' | encoding_func(),
+      Location :: erl_scan:location(),
       Line :: erl_scan:line(),
+      Column :: erl_scan:column(),
       AbsTerm :: abstract_expr().
 
 abstract(T, Line) when is_integer(Line) ->
     abstract(T, Line, enc_func(epp:default_encoding()));
+abstract(T, Loc) when is_tuple(Loc) ->
+    abstract(T, Loc, enc_func(epp:default_encoding()));
 abstract(T, Options) when is_list(Options) ->
     Line = proplists:get_value(line, Options, 0),
-    Encoding = proplists:get_value(encoding, Options,epp:default_encoding()),
+    Loc = case get_attribute(Options, column) of
+	          undefined ->
+                  Line;
+	          {column,Column} ->
+                  {Line,Column}
+	      end,
+    Encoding = proplists:get_value(encoding, Options, epp:default_encoding()),
     EncFunc = enc_func(Encoding),
-    abstract(T, Line, EncFunc).
+    abstract(T, Loc, EncFunc).
 
 -define(UNICODE(C),
          (C < 16#D800 orelse

@@ -180,6 +180,9 @@
           abstract form of type <c><anno>AbsTerm</anno></c>.</p>
         <p>The <c><anno>Line</anno></c> option is the line that will
           be assigned to each node of the abstract form.</p>
+        <p>The <c><anno>Column</anno></c> option is the line that will
+          be assigned to each node of the abstract form. If missing, only
+          line numbers are included.</p>
         <p>The <c><anno>Encoding</anno></c> option is used for
           selecting which integer lists will be considered
           as strings. The default is to use the encoding returned by

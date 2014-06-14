@@ -175,10 +175,10 @@ badarg(Config) when is_list(Config) ->
               q(bar, cache_all, extra).
        ">>,
        [],
-       {errors,[{5,?QLC,not_a_query_list_comprehension},
-                {6,?QLC,not_a_query_list_comprehension},
-                {8,?QLC,not_a_query_list_comprehension},
-                {9,?QLC,not_a_query_list_comprehension}],
+       {errors,[{{5,18},?QLC,not_a_query_list_comprehension},
+                {{6,18},?QLC,not_a_query_list_comprehension},
+                {{8,15},?QLC,not_a_query_list_comprehension},
+                {{9,15},?QLC,not_a_query_list_comprehension}],
         []}}],
     ?line [] = compile(Config, Ts),
     ok.
@@ -443,7 +443,7 @@ nomatch(Config) when is_list(Config) ->
                      end, [{\"ab\"}]).
         ">>,
         [],
-        {warnings,[{3,v3_core,nomatch}]}}
+        {warnings,[{{3,38},v3_core,nomatch}]}}
 
       ],
     ?line [] = compile(Config, Ts),
@@ -3204,8 +3204,8 @@ lookup2(Config) when is_list(Config) ->
                  false = lookup_keys(Q)
          end, [{1,b},{2,3}])">>,
         {warnings,[{2,sys_core_fold,nomatch_guard},
-		   {3,qlc,nomatch_filter},
-		   {3,sys_core_fold,{eval_failure,badarg}}]}},
+		   {3,sys_core_fold,{eval_failure,badarg}},
+		   {{3,48},qlc,nomatch_filter}]}},
 
        <<"etsc(fun(E) ->
                 Q = qlc:q([X || {X} <- ets:table(E), element(1,{X}) =:= 1]),
@@ -5682,7 +5682,7 @@ join_complex(Config) when is_list(Config) ->
                                      ]),
                   qlc:e(Q).">>,
            [],
-           {warnings,[{3,qlc,too_complex_join}]}},
+           {warnings,[{{3,26},qlc,too_complex_join}]}},
 
           {two,
            <<"two() ->
@@ -5695,7 +5695,7 @@ join_complex(Config) when is_list(Config) ->
                       Z =:= W],{join,merge}),
                   qlc:e(Q).">>,
            [],
-           {warnings,[{2,qlc,too_many_joins}]}}
+           {warnings,[{{2,26},qlc,too_many_joins}]}}
        ],
 
     ?line compile(Config, Ts),
@@ -5937,7 +5937,7 @@ otp_6562(Config) when is_list(Config) ->
                qlc:info(Q).
         ">>,
         [],
-        {errors,[{2,qlc,binary_generator}],
+        {errors,[{{2,40},qlc,binary_generator}],
          []}}
        ],
     ?line [] = compile(Config, Bits),
@@ -8000,9 +8000,7 @@ comp_compare(T, T) ->
     true;
 comp_compare(T1, T2_0) ->
     T2 = wskip(T2_0),
-    T1 =:= T2
-       %% This clause should eventually be removed. 
-       orelse ln(T1) =:= T2 orelse T1 =:= ln(T2).
+    T1 =:= T2.
 
 wskip([]) ->
     [];
@@ -8017,34 +8015,6 @@ wskip([M|L]) ->
 wskip(T) ->
     T.
 
-%% Replaces locations like {Line,Column} with Line. 
-ln({warnings,L}) ->
-    {warnings,ln0(L)};
-ln({errors,EL,WL}) ->
-    {errors,ln0(EL),ln0(WL)};
-ln(L) ->
-    ln0(L).
-
-ln0(L) ->
-    lists:sort(ln1(L)).
-
-ln1([]) ->
-    [];
-ln1([{File,Ms}|MsL]) when is_list(File) ->
-    [{File,ln0(Ms)}|ln1(MsL)];
-ln1([{{L,_C},Mod,Mess0}|Ms]) ->
-    Mess = case Mess0 of
-               {exported_var,V,{Where,{L1,_C1}}} ->
-                   {exported_var,V,{Where,L1}};
-               {unsafe_var,V,{Where,{L1,_C1}}} ->
-                   {unsafe_var,V,{Where,L1}};
-               %% There are more...
-               M ->
-                   M
-           end,
-    [{L,Mod,Mess}|ln1(Ms)];
-ln1([M|Ms]) ->
-    [M|ln1(Ms)].
 
 %% -> {FileName, Module}; {string(), atom()}
 compile_file_mod(Config) ->

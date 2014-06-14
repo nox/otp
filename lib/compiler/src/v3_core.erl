@@ -2313,6 +2313,10 @@ format_error(bad_map_key) ->
 format_error(bad_map) ->
     "map construction will fail because of a type mismatch".
 
-add_warning(Line, Term, #core{ws=Ws,file=[{file,File}]}=St) when Line >= 0 ->
+add_warning({Line,_}=Loc, Term, #core{ws=Ws,file=[{file,File}]}=St)
+		   when Line >= 0 ->
+    St#core{ws=[{File,[{location(Loc),?MODULE,Term}]}|Ws]};
+add_warning(Line, Term, #core{ws=Ws,file=[{file,File}]}=St)
+		   when is_integer(Line), Line >= 0 ->
     St#core{ws=[{File,[{location(Line),?MODULE,Term}]}|Ws]};
 add_warning(_, _, St) -> St.

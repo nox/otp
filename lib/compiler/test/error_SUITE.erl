@@ -23,7 +23,7 @@
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2,
 	 head_mismatch_line/1,warnings_as_errors/1, bif_clashes/1,
-	 transforms/1,forbidden_maps/1,bad_utf8/1]).
+         transforms/1,forbidden_maps/1,bad_utf8/1,column_number/1]).
 
 %% Used by transforms/1 test case.
 -export([parse_transform/2]).
@@ -37,7 +37,7 @@ all() ->
 groups() -> 
     [{p,test_lib:parallel(),
       [head_mismatch_line,warnings_as_errors,bif_clashes,
-       transforms,forbidden_maps,bad_utf8]}].
+       transforms,forbidden_maps,bad_utf8,column_number]}].
 
 init_per_suite(Config) ->
     Config.
@@ -63,10 +63,9 @@ bif_clashes(Config) when is_list(Config) ->
                erlang:length(X).
              ">>,
            [return_warnings],
-	   {error,
-	    [{4, erl_lint,{call_to_redefined_old_bif,{length,1}}}], []} }],
-    ?line [] = run(Config, Ts),
-    Ts1 = [{bif_clashes2,
+           {error,[{{4,18},erl_lint,{call_to_redefined_old_bif,{length,1}}}],
+            []}},
+          {bif_clashes2,
            <<"
               -export([t/0]).
               -import(x,[length/1]).
@@ -74,10 +73,9 @@ bif_clashes(Config) when is_list(Config) ->
                  length([a,b,c]).
              ">>,
            [return_warnings],
-	    {error,
-	     [{3, erl_lint,{redefine_old_bif_import,{length,1}}}], []} }],
-    ?line [] = run(Config, Ts1),
-    Ts00 = [{bif_clashes3,
+           {error,[{{3,16}, erl_lint,{redefine_old_bif_import,{length,1}}}],
+            []}},
+          {bif_clashes3,
            <<"
               -export([t/0]).
               -compile({no_auto_import,[length/1]}).
@@ -88,9 +86,8 @@ bif_clashes(Config) when is_list(Config) ->
                erlang:length(X).
              ">>,
            [return_warnings],
-	   []}],
-    ?line [] = run(Config, Ts00),
-    Ts11 = [{bif_clashes4,
+           []},
+          {bif_clashes4,
            <<"
               -export([t/0]).
               -compile({no_auto_import,[length/1]}).
@@ -99,9 +96,8 @@ bif_clashes(Config) when is_list(Config) ->
                  length([a,b,c]).
              ">>,
            [return_warnings],
-	    []}],
-    ?line [] = run(Config, Ts11),
-    Ts000 = [{bif_clashes5,
+            []},
+          {bif_clashes5,
            <<"
               -export([t/0]).
               t() ->
@@ -111,10 +107,9 @@ bif_clashes(Config) when is_list(Config) ->
                erlang:binary_part(X,Y,Z).
              ">>,
            [return_warnings],
-	   {warning,
-	    [{4, erl_lint,{call_to_redefined_bif,{binary_part,3}}}]} }],
-    ?line [] = run(Config, Ts000),
-    Ts111 = [{bif_clashes6,
+           {warning,
+            [{{4,18},erl_lint,{call_to_redefined_bif,{binary_part,3}}}]}},
+          {bif_clashes6,
            <<"
               -export([t/0]).
               -import(x,[binary_part/3]).
@@ -122,10 +117,8 @@ bif_clashes(Config) when is_list(Config) ->
                   binary_part(<<1,2,3,4>>,1,2).
              ">>,
            [return_warnings],
-	    {warning,
-	     [{3, erl_lint,{redefine_bif_import,{binary_part,3}}}]} }],
-    ?line [] = run(Config, Ts111),
-    Ts2 = [{bif_clashes7,
+           {warning,[{{3,16},erl_lint,{redefine_bif_import,{binary_part,3}}}]}},
+          {bif_clashes7,
            <<"
               -export([t/0]).
               -compile({no_auto_import,[length/1]}).
@@ -136,11 +129,8 @@ bif_clashes(Config) when is_list(Config) ->
                  erlang:length(X).
              ">>,
            [],
-          {error,
-           [{7,erl_lint,{define_import,{length,1}}}],
-           []} }],
-    ?line [] = run2(Config, Ts2),
-    Ts3 = [{bif_clashes8,
+           {error,[{{7,15},erl_lint,{define_import,{length,1}}}],[]}},
+          {bif_clashes8,
            <<"
               -export([t/1]).
               -compile({no_auto_import,[length/1]}).
@@ -150,11 +140,9 @@ bif_clashes(Config) when is_list(Config) ->
                  erlang:length(X).
              ">>,
            [],
-          {error,
-           [{4,erl_lint,{illegal_guard_local_call,{length,1}}}],
-           []} }],
-    ?line [] = run2(Config, Ts3),
-    Ts4 = [{bif_clashes9,
+           {error,[{{4,25},erl_lint,{illegal_guard_local_call,{length,1}}}],
+            []}},
+          {bif_clashes9,
            <<"
               -export([t/1]).
               -compile({no_auto_import,[length/1]}).
@@ -163,20 +151,31 @@ bif_clashes(Config) when is_list(Config) ->
                  length([a,b,c]).
              ">>,
            [],
-          {error,
-           [{5,erl_lint,{illegal_guard_local_call,{length,1}}}],
-           []} }],
-    ?line [] = run2(Config, Ts4),
-
+           {error,[{{5,25},erl_lint,{illegal_guard_local_call,{length,1}}}],
+            []}}],
+    [] = run(Config, Ts4),
     ok.
 
 
 
+%% Tests that messages are correctly reported with column numbers
+%% if the column option is set.
+column_number(Config) when is_list(Config) ->
+    Ts = [{column_number_warning,
+	   <<"
+              -export([t/1]).
+              t(X) ->
+                 ok.
+             ">>,
+	   [return_warnings],
+	   {warning,[{{3,17},erl_lint,{unused_var,'X'}}]}}],
+    [] = run(Config, Ts),
+    ok.
 
 %% Tests that a head mismatch is reported on the correct line (OTP-2125).
 head_mismatch_line(Config) when is_list(Config) ->
     ?line [E|_] = get_compilation_errors(Config, "head_mismatch_line"),
-    ?line {26, Mod, Reason} = E,
+    {{26,1},Mod,Reason} = E,
     ?line Mod:format_error(Reason),
     ok.
 
@@ -200,9 +199,7 @@ warnings_as_errors(Config) when is_list(Config) ->
                  ok.
              ">>,
 	    [warnings_as_errors, export_all, {outdir, OutDir}],
-	    {error,
-	     [],
-	     [{3,erl_lint,{unused_var,'A'}}]} }],
+            {error,[],[{{3,18},erl_lint,{unused_var,'A'}}]}}],
     ?line [] = run(Ts1, TestFile, write_beam),
     ?line false = filelib:is_regular(BeamFile),
 
@@ -213,8 +210,7 @@ warnings_as_errors(Config) when is_list(Config) ->
                  ok.
              ">>,
 	    [return_warnings, export_all, {outdir, OutDir}],
-	    {warning,
-	       [{3,erl_lint,{unused_var,'A'}}]} }],
+            {warning,[{{3,18},erl_lint,{unused_var,'A'}}]}}],
 
     ?line [] = run(Ts2, TestFile, write_beam),
     ?line true = filelib:is_regular(BeamFile),
