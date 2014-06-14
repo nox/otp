@@ -147,6 +147,11 @@
           and <c>{white_space, Info, string()}</c>.</p>
         <p>The valid options are:</p>
         <taglist>
+        <tag><c>range</c></tag>
+        <item><p>Include the token's location rangein the token attributes. If
+          <c><anno>StartLocation</anno></c> is a line <c>attributes()</c>, no
+          location range is computed.</p>
+        </item>
         <tag><c>{reserved_word_fun, reserved_word_fun()}</c></tag>
         <item><p>A callback function that is called when the scanner
           has found an unquoted atom. If the function returns
@@ -284,6 +289,9 @@
             column()</seealso>}</c></tag>
           <item><p>The column where the token begins.</p>
           </item>
+          <tag><c>{range, {{line(), column()}, {line(), column()}}}</c></tag>
+          <item><p>The location range where the token resides.</p>
+          </item>
           <tag><c>{file, string()}</c></tag>
           <item><p>The file in which the token is.</p>
           </item>
@@ -353,6 +361,9 @@
           <tag><c>{column, <seealso marker="#type-column">
             column()</seealso>}</c></tag>
           <item><p>The column where the token begins.</p>
+          </item>
+          <tag><c>{'end', {line(), column()}}</c></tag>
+          <item><p>The full location where the token ends.</p>
           </item>
           <tag><c>{file, string()}</c></tag>
           <item><p>The file in which the token is.</p>
